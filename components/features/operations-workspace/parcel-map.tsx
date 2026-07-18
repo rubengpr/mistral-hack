@@ -100,7 +100,7 @@ function createMapLabelElement(label: string, showGrape = false) {
 type ParcelMapProps = {
   parcels: ParcelCollection;
   affectedSector: SectorFeature;
-  selectedParcelId: string;
+  selectedParcelId?: string;
   onSelectParcel: (parcelId: string) => void;
 };
 
@@ -194,7 +194,7 @@ export function ParcelMap({
         paint: {
           'fill-color': [
             'case',
-            ['==', ['get', 'id'], selectedParcelIdRef.current],
+            ['==', ['get', 'id'], selectedParcelIdRef.current ?? ''],
             '#315c4a',
             ['==', ['get', 'moistureStatus'], 'critical'],
             '#b86b4b',
@@ -204,7 +204,7 @@ export function ParcelMap({
           ],
           'fill-opacity': [
             'case',
-            ['==', ['get', 'id'], selectedParcelIdRef.current],
+            ['==', ['get', 'id'], selectedParcelIdRef.current ?? ''],
             0.78,
             0.58,
           ],
@@ -258,7 +258,7 @@ export function ParcelMap({
           'line-color': '#ffffff',
           'line-width': [
             'case',
-            ['==', ['get', 'id'], selectedParcelIdRef.current],
+            ['==', ['get', 'id'], selectedParcelIdRef.current ?? ''],
             3,
             1.5,
           ],
@@ -367,7 +367,7 @@ export function ParcelMap({
     source?.setData(parcels);
     map.setPaintProperty(PARCEL_FILL_LAYER_ID, 'fill-color', [
       'case',
-      ['==', ['get', 'id'], selectedParcelId],
+      ['==', ['get', 'id'], selectedParcelId ?? ''],
       '#315c4a',
       ['==', ['get', 'moistureStatus'], 'critical'],
       '#b86b4b',
@@ -375,9 +375,15 @@ export function ParcelMap({
       '#c99850',
       '#7d9b83',
     ]);
+    map.setPaintProperty(PARCEL_FILL_LAYER_ID, 'fill-opacity', [
+      'case',
+      ['==', ['get', 'id'], selectedParcelId ?? ''],
+      0.78,
+      0.58,
+    ]);
     map.setPaintProperty(PARCEL_LINE_LAYER_ID, 'line-width', [
       'case',
-      ['==', ['get', 'id'], selectedParcelId],
+      ['==', ['get', 'id'], selectedParcelId ?? ''],
       3,
       1.5,
     ]);

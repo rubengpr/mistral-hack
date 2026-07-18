@@ -2,7 +2,6 @@
 
 import { ParcelMapShell } from '@/components/features/operations-workspace/parcel-map-shell';
 import { ParcelSummaryPanel } from '@/components/features/operations-workspace/parcel-summary-panel';
-import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import type { ActiveFinding } from '@/types/operations-dashboard';
 import type {
@@ -15,6 +14,8 @@ type ParcelMapCardProps = {
   affectedSector: SectorFeature;
   expanded?: boolean;
   finding?: ActiveFinding;
+  isDetailsOpen?: boolean;
+  onCloseDetails?: () => void;
   onSelectParcel: (parcelId: string) => void;
   parcels: ParcelCollection;
   selectedParcel: ParcelProperties;
@@ -24,19 +25,24 @@ export function ParcelMapCard({
   affectedSector,
   expanded = false,
   finding,
+  isDetailsOpen = false,
+  onCloseDetails,
   onSelectParcel,
   parcels,
   selectedParcel,
 }: ParcelMapCardProps) {
   return (
-    <Card
-      className={cn('overflow-hidden', expanded && 'flex min-h-full flex-col')}
+    <div
+      className={cn(
+        'relative overflow-hidden rounded-xl border bg-card shadow',
+        expanded && 'h-full min-h-[30rem]',
+      )}
     >
-      <CardContent
+      <div
         className={cn(
-          'p-0',
+          'min-h-80',
           expanded
-            ? 'h-[44svh] min-h-80 shrink-0'
+            ? 'h-full'
             : 'h-[48svh] min-h-80 xl:h-[calc(100svh-15rem)] xl:min-h-[34rem]',
         )}
       >
@@ -44,17 +50,18 @@ export function ParcelMapCard({
           affectedSector={affectedSector}
           onSelectParcel={onSelectParcel}
           parcels={parcels}
-          selectedParcelId={selectedParcel.id}
+          selectedParcelId={isDetailsOpen ? selectedParcel.id : undefined}
         />
-      </CardContent>
+      </div>
 
-      <CardFooter className="flex flex-col items-stretch gap-3 border-t pt-4">
+      {isDetailsOpen ? (
         <ParcelSummaryPanel
           affectedSector={affectedSector}
           finding={finding}
+          onClose={onCloseDetails}
           parcel={selectedParcel}
         />
-      </CardFooter>
-    </Card>
+      ) : null}
+    </div>
   );
 }

@@ -65,6 +65,7 @@ export function OperationsWorkspace({ route }: OperationsWorkspaceProps) {
     getServerSelectedParcelId,
   );
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
+  const [isParcelDetailsOpen, setIsParcelDetailsOpen] = useState(false);
 
   const selectedParcelId = data.parcels.features.some(
     ({ properties }) => properties.id === storedSelectedParcelId,
@@ -84,6 +85,7 @@ export function OperationsWorkspace({ route }: OperationsWorkspaceProps) {
     const state = repository.load();
     repository.save({ ...state, selectedParcelId: parcelId });
     window.dispatchEvent(new Event(DEMO_SELECTION_EVENT));
+    setIsParcelDetailsOpen(true);
   }
 
   return (
@@ -139,7 +141,9 @@ export function OperationsWorkspace({ route }: OperationsWorkspaceProps) {
           <div
             className={cn(
               'min-h-0 min-w-0',
-              (route === 'map' || route === 'weather') && 'overflow-y-auto',
+              route === 'map'
+                ? 'h-full overflow-hidden'
+                : route === 'weather' && 'overflow-y-auto',
             )}
           >
             {route === 'weather' ? (
@@ -154,6 +158,8 @@ export function OperationsWorkspace({ route }: OperationsWorkspaceProps) {
                 affectedSector={data.affectedSector}
                 expanded
                 finding={isAffectedParcel ? data.finding : undefined}
+                isDetailsOpen={isParcelDetailsOpen}
+                onCloseDetails={() => setIsParcelDetailsOpen(false)}
                 onSelectParcel={selectParcel}
                 parcels={data.parcels}
                 selectedParcel={selectedParcel}

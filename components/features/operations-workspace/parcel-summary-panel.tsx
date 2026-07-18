@@ -5,12 +5,21 @@ import {
   Droplets,
   LandPlot,
   MapPin,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import type { ActiveFinding } from '@/types/operations-dashboard';
 import type {
@@ -47,81 +56,98 @@ function SummaryItem({ icon: Icon, label, value }: SummaryItemProps) {
 type ParcelSummaryPanelProps = {
   affectedSector: SectorFeature;
   finding?: ActiveFinding;
+  onClose?: () => void;
   parcel: ParcelProperties;
 };
 
 export function ParcelSummaryPanel({
   affectedSector,
   finding,
+  onClose,
   parcel,
 }: ParcelSummaryPanelProps) {
   const activeFinding = finding?.parcelId === parcel.id ? finding : undefined;
   const sectorName = activeFinding ? affectedSector.properties.name : 'None';
 
   return (
-    <section className="flex flex-col gap-4" aria-labelledby="parcel-summary">
-      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
-        <div className="flex min-w-0 flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <h2 id="parcel-summary" className="truncate font-semibold">
-              {parcel.name}
-            </h2>
-            <Badge
-              variant={
-                parcel.moistureStatus === 'critical'
-                  ? 'destructive'
-                  : 'secondary'
-              }
-            >
-              {parcel.moistureStatus}
-            </Badge>
-          </div>
-          <p className="truncate text-sm text-muted-foreground">
-            {parcel.municipality}, {parcel.department}
-          </p>
+    <Card
+      className="absolute inset-x-3 bottom-3 max-h-[calc(100%-1.5rem)] overflow-y-auto shadow-lg"
+      role="region"
+      aria-labelledby="parcel-summary"
+    >
+      <Button
+        aria-label="Close parcel details"
+        className="absolute right-3 top-3"
+        onClick={onClose}
+        size="icon"
+        type="button"
+        variant="ghost"
+      >
+        <X aria-hidden="true" />
+      </Button>
+
+      <CardHeader className="p-4 pb-3 pr-14">
+        <div className="flex min-w-0 items-center gap-2">
+          <CardTitle id="parcel-summary" className="truncate">
+            {parcel.name}
+          </CardTitle>
+          <Badge
+            variant={
+              parcel.moistureStatus === 'critical' ? 'destructive' : 'secondary'
+            }
+          >
+            {parcel.moistureStatus}
+          </Badge>
         </div>
+        <CardDescription className="truncate">
+          {parcel.municipality}, {parcel.department}
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent className="px-4 pb-4">
+        <Separator />
+        <dl className="mt-4 grid grid-cols-2 gap-4">
+          <SummaryItem
+            icon={MapPin}
+            label="Location"
+            value={`${parcel.municipality}, ${parcel.department}`}
+          />
+          <SummaryItem
+            icon={LandPlot}
+            label="Surface area"
+            value={`${parcel.areaHectares} ha`}
+          />
+          <SummaryItem
+            icon={Droplets}
+            label="Soil moisture"
+            value={`${parcel.currentSoilMoisturePercent}%`}
+          />
+          <SummaryItem
+            icon={CalendarClock}
+            label="Last reviewed"
+            value={DATE_FORMATTER.format(new Date(parcel.lastReviewedAt))}
+          />
+          <SummaryItem
+            icon={AlertTriangle}
+            label="Active alert"
+            value={activeFinding?.title ?? 'None'}
+          />
+          <SummaryItem
+            icon={LandPlot}
+            label="Affected sector"
+            value={sectorName}
+          />
+        </dl>
+      </CardContent>
+
+      <CardFooter className="justify-end px-4 pb-4">
         <Button asChild size="sm" variant="outline">
           <Link href={`/parcels/${parcel.id}`}>
             Open full details
             <ArrowUpRight data-icon="inline-end" aria-hidden="true" />
           </Link>
         </Button>
-      </div>
-
-      <Separator />
-
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-4 lg:grid-cols-3">
-        <SummaryItem
-          icon={MapPin}
-          label="Location"
-          value={`${parcel.municipality}, ${parcel.department}`}
-        />
-        <SummaryItem
-          icon={LandPlot}
-          label="Surface area"
-          value={`${parcel.areaHectares} ha`}
-        />
-        <SummaryItem
-          icon={Droplets}
-          label="Soil moisture"
-          value={`${parcel.currentSoilMoisturePercent}%`}
-        />
-        <SummaryItem
-          icon={CalendarClock}
-          label="Last reviewed"
-          value={DATE_FORMATTER.format(new Date(parcel.lastReviewedAt))}
-        />
-        <SummaryItem
-          icon={AlertTriangle}
-          label="Active alert"
-          value={activeFinding?.title ?? 'None'}
-        />
-        <SummaryItem
-          icon={LandPlot}
-          label="Affected sector"
-          value={sectorName}
-        />
-      </dl>
-    </section>
+      </CardFooter>
+    </Card>
   );
 }

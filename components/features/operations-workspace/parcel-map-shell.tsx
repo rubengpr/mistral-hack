@@ -26,7 +26,7 @@ const ParcelMap = dynamic(
 type ParcelMapShellProps = {
   parcels: ParcelCollection;
   affectedSector: SectorFeature;
-  selectedParcelId: string;
+  selectedParcelId?: string;
   onSelectParcel: (parcelId: string) => void;
 };
 
