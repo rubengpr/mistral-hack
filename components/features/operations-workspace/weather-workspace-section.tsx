@@ -14,10 +14,13 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchWeatherSeries } from '@/lib/api/weather-api';
+import {
+  fetchWeatherForecast,
+  fetchWeatherSeries,
+} from '@/lib/api/weather-api';
 import { getParcelCenter } from '@/lib/geo/parcel-center';
 import type { ParcelFeature } from '@/types/agricultural-operations';
-import type { WeatherSeries } from '@/types/weather';
+import type { WeatherForecast, WeatherSeries } from '@/types/weather';
 
 const DEMO_START_DATE = '2026-01-01';
 const DEMO_END_DATE = '2026-07-18';
@@ -30,22 +33,36 @@ export function WeatherWorkspaceSection({
   parcel,
 }: WeatherWorkspaceSectionProps) {
   const [series, setSeries] = useState<WeatherSeries>();
+  const [forecast, setForecast] = useState<WeatherForecast>();
   const [error, setError] = useState<string>();
 
   useEffect(() => {
     const controller = new AbortController();
     const [longitude, latitude] = getParcelCenter(parcel.geometry);
 
-    void fetchWeatherSeries(
-      {
-        latitude,
-        longitude,
-        startDate: DEMO_START_DATE,
-        endDate: DEMO_END_DATE,
-      },
-      controller.signal,
-    )
-      .then(setSeries)
+    void Promise.all([
+      fetchWeatherSeries(
+        {
+          latitude,
+          longitude,
+          startDate: DEMO_START_DATE,
+          endDate: DEMO_END_DATE,
+        },
+        controller.signal,
+      ),
+      fetchWeatherForecast(
+        {
+          scope: 'parcel',
+          parcelId: parcel.properties.id,
+          referenceDate: DEMO_END_DATE,
+        },
+        controller.signal,
+      ),
+    ])
+      .then(([weatherSeries, weatherForecast]) => {
+        setSeries(weatherSeries);
+        setForecast(weatherForecast);
+      })
       .catch((requestError: unknown) => {
         if (
           requestError instanceof DOMException &&
@@ -58,7 +75,7 @@ export function WeatherWorkspaceSection({
       });
 
     return () => controller.abort();
-  }, [parcel.geometry]);
+  }, [parcel.geometry, parcel.properties.id]);
 
   if (error) {
     return (
@@ -70,7 +87,7 @@ export function WeatherWorkspaceSection({
     );
   }
 
-  if (!series) {
+  if (!series || !forecast) {
     return (
       <div className="flex flex-col gap-4">
         <Skeleton className="h-24 w-full" />
@@ -79,7 +96,6 @@ export function WeatherWorkspaceSection({
     );
   }
 
-  const latestPoint = series.points.at(-1);
   const rainfallTotal = series.points.reduce(
     (total, point) => total + point.precipitationMillimeters,
     0,
@@ -96,9 +112,9 @@ export function WeatherWorkspaceSection({
           </p>
         </div>
         <Badge
-          variant={series.source === 'open-meteo' ? 'secondary' : 'outline'}
+          variant={forecast.source === 'open-meteo' ? 'secondary' : 'outline'}
         >
-          {series.sourceLabel}
+          {forecast.sourceLabel}
         </Badge>
       </div>
 
@@ -107,14 +123,14 @@ export function WeatherWorkspaceSection({
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-2">
               <CloudRain className="size-4" aria-hidden="true" />
-              Total precipitation
+              Recent precipitation
             </CardDescription>
             <CardTitle className="text-2xl tabular-nums">
-              {rainfallTotal.toFixed(1)} mm
+              {forecast.recent.totalPrecipitationMillimeters.toFixed(1)} mm
             </CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground">
-            Jan 1–Jul 18
+            {forecast.recent.startsOn}–{forecast.recent.endsOn}
           </CardContent>
         </Card>
 
@@ -122,14 +138,14 @@ export function WeatherWorkspaceSection({
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-2">
               <ThermometerSun className="size-4" aria-hidden="true" />
-              Latest daily maximum
+              Forecast maximum
             </CardDescription>
             <CardTitle className="text-2xl tabular-nums">
-              {latestPoint?.maximumTemperatureCelsius.toFixed(1) ?? '—'} °C
+              {forecast.forecast.maximumTemperatureCelsius.toFixed(1)} °C
             </CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground">
-            {series.endsOn}
+            Next 7 days
           </CardContent>
         </Card>
 
@@ -137,10 +153,11 @@ export function WeatherWorkspaceSection({
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-2">
               <Droplets className="size-4" aria-hidden="true" />
-              Latest reference ET₀
+              Forecast reference ET₀
             </CardDescription>
             <CardTitle className="text-2xl tabular-nums">
-              {latestPoint?.evapotranspirationMillimeters.toFixed(2) ?? '—'} mm
+              {forecast.forecast.totalEvapotranspirationMillimeters.toFixed(1)}{' '}
+              mm
             </CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground">
@@ -150,12 +167,32 @@ export function WeatherWorkspaceSection({
       </div>
 
       <WeatherSeriesChartCard
+        parcelName={`${parcel.properties.name} · 7-day forecast`}
+        series={{
+          source: forecast.source,
+          sourceLabel: forecast.sourceLabel,
+          attributionUrl: forecast.attributionUrl,
+          latitude: forecast.latitude,
+          longitude: forecast.longitude,
+          timezone: forecast.timezone,
+          startsOn: forecast.forecast.startsOn,
+          endsOn: forecast.forecast.endsOn,
+          points: forecast.forecast.daily,
+        }}
+        title="7-day forecast"
+      />
+
+      <WeatherSeriesChartCard
         parcelName={parcel.properties.name}
         series={series}
       />
 
       <p className="text-xs text-muted-foreground">
-        {series.attributionUrl ? (
+        Historical precipitation since Jan 1: {rainfallTotal.toFixed(1)} mm.
+      </p>
+
+      <p className="text-xs text-muted-foreground">
+        {forecast.attributionUrl ? (
           <>
             Weather data by{' '}
             <a

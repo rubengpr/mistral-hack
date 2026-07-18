@@ -20,6 +20,9 @@
     --accent-foreground: 240 5.9% 10%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
+    --status-normal: 142 34% 38%;
+    --status-review: 38 74% 47%;
+    --status-critical: 4 62% 52%;
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
     --ring: 240 10% 3.9%;
@@ -51,6 +54,9 @@
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
+    --status-normal: 142 42% 55%;
+    --status-review: 38 82% 60%;
+    --status-critical: 4 72% 62%;
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%;
     --ring: 240 10% 3.9%;
@@ -63,10 +69,39 @@
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
+
+  .landing-page {
+    --primary: 142 38% 28%;
+    --primary-foreground: 0 0% 98%;
+    --accent: 137 30% 95%;
+    --accent-foreground: 142 40% 18%;
+    --ring: 142 34% 38%;
+  }
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+
+  .landing-orb {
+    animation: landing-drift 12s ease-in-out infinite;
+  }
+
+  @keyframes landing-drift {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+
+    50% {
+      transform: translate3d(-1.5rem, 1rem, 0) scale(1.04);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .landing-orb {
+      animation: none;
+    }
   }
 }
