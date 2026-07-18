@@ -4,6 +4,7 @@ import type {
   MultiPolygon,
   Polygon,
 } from 'geojson';
+import type { PersistedReportState } from '@/types/inspection-report';
 
 export type ParcelMoistureStatus = 'stable' | 'watch' | 'critical';
 export type ParcelCluster = 'herault' | 'aude' | 'gard' | 'pyrenees-orientales';
@@ -114,16 +115,18 @@ export type InspectionNote = {
   createdAt: string;
 };
 
+export type FieldPhotoAnalysis = {
+  observation: string;
+  inference: string;
+  uncertainty: string;
+  recommendedVerification: string;
+};
+
 export type FieldPhoto = {
   id: string;
   dataUrl: string;
   capturedAt: string;
-  analysis?: {
-    observation: string;
-    inference: string;
-    uncertainty: string;
-    recommendedVerification: string;
-  };
+  analysis?: FieldPhotoAnalysis;
 };
 
 export type TechnicianAction = {
@@ -161,4 +164,5 @@ export type DemoState = {
   selectedParcelId: string;
   activeFindingId: string;
   activeInspection: Inspection;
+  report?: PersistedReportState;
 };
