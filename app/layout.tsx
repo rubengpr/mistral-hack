@@ -4,9 +4,9 @@ import './globals.css';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 export const metadata: Metadata = {
-  title: 'Agricultural Operations Assistant',
+  title: 'Vinea — Agricultural Operations Intelligence',
   description:
-    'A responsive workspace that turns agricultural evidence into prioritized field work.',
+    'AI-powered agricultural operations that turn field evidence into prioritized action.',
 };
 
 export default function RootLayout({
