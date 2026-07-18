@@ -27,6 +27,7 @@ type ParcelMapShellProps = {
   parcels: ParcelCollection;
   affectedSector: SectorFeature;
   selectedParcelId?: string;
+  showParcelStatus: boolean;
   onSelectParcel: (parcelId: string) => void;
 };
 

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import type { Feature, FeatureCollection, Point, Position } from 'geojson';
 import maplibregl, {
+  type ExpressionSpecification,
   type GeoJSONSource,
   type Map as MapLibreMap,
 } from 'maplibre-gl';
@@ -12,6 +13,7 @@ import type {
   ParcelCollection,
   ParcelFeature,
   ParcelGeometry,
+  ParcelMoistureStatus,
   SectorFeature,
 } from '@/types/agricultural-operations';
 
@@ -19,11 +21,35 @@ const PARCEL_SOURCE_ID = 'parcels';
 const PARCEL_FILL_LAYER_ID = 'parcel-fill';
 const PARCEL_LINE_LAYER_ID = 'parcel-line';
 const SECTOR_SOURCE_ID = 'affected-sector';
+const SECTOR_FILL_LAYER_ID = 'affected-sector-fill';
+const SECTOR_LINE_LAYER_ID = 'affected-sector-line';
 const CLUSTER_SOURCE_ID = 'portfolio-clusters';
 const CLUSTER_LAYER_ID = 'portfolio-cluster-circles';
 const BASEMAP_SOURCE_ID = 'openstreetmap';
 const BASEMAP_LAYER_ID = 'openstreetmap-basemap';
 const OPENSTREETMAP_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const NEUTRAL_PARCEL_COLOR = '#2f3632';
+const STABLE_PARCEL_COLOR = '#4f7f5e';
+const REVIEW_PARCEL_COLOR = '#d39a3c';
+const CRITICAL_PARCEL_COLOR = '#b55448';
+
+type ClusterPointProperties = {
+  cluster: ParcelCluster;
+  label: string;
+  totalCount: number;
+  flaggedCount: number;
+  moistureStatus: ParcelMoistureStatus;
+};
+
+type ClusterMarkerRecord = {
+  marker: maplibregl.Marker;
+  properties: ClusterPointProperties;
+};
+
+type ParcelMarkerRecord = {
+  marker: maplibregl.Marker;
+  moistureStatus: ParcelMoistureStatus;
+};
 
 const CLUSTER_LABELS: Record<ParcelCluster, string> = {
   herault: 'Hérault',
@@ -67,12 +93,35 @@ function getClusterBounds(parcels: ParcelCollection, cluster: ParcelCluster) {
   return positions.length > 0 ? boundsFromPositions(positions) : undefined;
 }
 
-function createClusterPoints(
+function getHighestPriorityStatus(
+  parcels: ParcelFeature[],
+): ParcelMoistureStatus {
+  if (
+    parcels.some(({ properties }) => properties.moistureStatus === 'critical')
+  ) {
+    return 'critical';
+  }
+
+  if (parcels.some(({ properties }) => properties.moistureStatus === 'watch')) {
+    return 'watch';
+  }
+
+  return 'stable';
+}
+
+export function createClusterPoints(
   parcels: ParcelCollection,
-): FeatureCollection<Point, { cluster: ParcelCluster; label: string }> {
+): FeatureCollection<Point, ClusterPointProperties> {
   const features = Object.entries(CLUSTER_LABELS).map(([cluster, label]) => {
-    const clusterBounds = getClusterBounds(parcels, cluster as ParcelCluster);
+    const parcelCluster = cluster as ParcelCluster;
+    const clusterParcels = parcels.features.filter(
+      ({ properties }) => properties.cluster === parcelCluster,
+    );
+    const clusterBounds = getClusterBounds(parcels, parcelCluster);
     const center = clusterBounds?.getCenter() ?? { lng: 0, lat: 0 };
+    const flaggedCount = clusterParcels.filter(
+      ({ properties }) => properties.moistureStatus !== 'stable',
+    ).length;
 
     return {
       type: 'Feature' as const,
@@ -80,8 +129,14 @@ function createClusterPoints(
         type: 'Point' as const,
         coordinates: [center.lng, center.lat],
       },
-      properties: { cluster: cluster as ParcelCluster, label },
-    } satisfies Feature<Point, { cluster: ParcelCluster; label: string }>;
+      properties: {
+        cluster: parcelCluster,
+        label,
+        totalCount: clusterParcels.length,
+        flaggedCount,
+        moistureStatus: getHighestPriorityStatus(clusterParcels),
+      },
+    } satisfies Feature<Point, ClusterPointProperties>;
   });
 
   return { type: 'FeatureCollection', features };
@@ -90,17 +145,101 @@ function createClusterPoints(
 function createMapLabelElement(label: string, showGrape = false) {
   const element = document.createElement('div');
   element.className =
-    'pointer-events-none max-w-44 truncate rounded-full border border-white/80 bg-foreground/90 px-2.5 py-1 text-[11px] font-semibold text-background shadow-sm';
+    'pointer-events-none max-w-56 truncate rounded-full border border-white/80 bg-foreground/90 px-2.5 py-1 text-[11px] font-semibold text-background shadow-sm transition-colors';
   element.textContent = showGrape ? `🍇 ${label}` : label;
   element.title = label;
 
   return element;
 }
 
+function getStatusColor(status: ParcelMoistureStatus) {
+  if (status === 'critical') {
+    return CRITICAL_PARCEL_COLOR;
+  }
+
+  if (status === 'watch') {
+    return REVIEW_PARCEL_COLOR;
+  }
+
+  return STABLE_PARCEL_COLOR;
+}
+
+export function getMapLabelColor(
+  moistureStatus: ParcelMoistureStatus,
+  showParcelStatus: boolean,
+) {
+  return showParcelStatus
+    ? getStatusColor(moistureStatus)
+    : NEUTRAL_PARCEL_COLOR;
+}
+
+function updateClusterMarker(
+  markerRecord: ClusterMarkerRecord,
+  showParcelStatus: boolean,
+) {
+  const element = markerRecord.marker.getElement();
+  const { label, moistureStatus, totalCount } = markerRecord.properties;
+  const markerLabel = `${label} · ${totalCount}`;
+
+  element.textContent = markerLabel;
+  element.title = markerLabel;
+  element.style.backgroundColor = getMapLabelColor(
+    moistureStatus,
+    showParcelStatus,
+  );
+}
+
+function updateParcelMarker(
+  markerRecord: ParcelMarkerRecord,
+  showParcelStatus: boolean,
+) {
+  markerRecord.marker.getElement().style.backgroundColor = getMapLabelColor(
+    markerRecord.moistureStatus,
+    showParcelStatus,
+  );
+}
+
+function getClusterCircleColor(
+  showParcelStatus: boolean,
+): string | ExpressionSpecification {
+  if (!showParcelStatus) {
+    return NEUTRAL_PARCEL_COLOR;
+  }
+
+  return [
+    'match',
+    ['get', 'moistureStatus'],
+    'critical',
+    CRITICAL_PARCEL_COLOR,
+    'watch',
+    REVIEW_PARCEL_COLOR,
+    STABLE_PARCEL_COLOR,
+  ];
+}
+
+export function getParcelFillColor(
+  showParcelStatus: boolean,
+): string | ExpressionSpecification {
+  if (!showParcelStatus) {
+    return NEUTRAL_PARCEL_COLOR;
+  }
+
+  return [
+    'match',
+    ['get', 'moistureStatus'],
+    'critical',
+    CRITICAL_PARCEL_COLOR,
+    'watch',
+    REVIEW_PARCEL_COLOR,
+    STABLE_PARCEL_COLOR,
+  ];
+}
+
 type ParcelMapProps = {
   parcels: ParcelCollection;
   affectedSector: SectorFeature;
   selectedParcelId?: string;
+  showParcelStatus: boolean;
   onSelectParcel: (parcelId: string) => void;
 };
 
@@ -108,12 +247,16 @@ export function ParcelMap({
   parcels,
   affectedSector,
   selectedParcelId,
+  showParcelStatus,
   onSelectParcel,
 }: ParcelMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  const clusterMarkersRef = useRef<ClusterMarkerRecord[]>([]);
+  const parcelMarkersRef = useRef<ParcelMarkerRecord[]>([]);
   const onSelectParcelRef = useRef(onSelectParcel);
   const selectedParcelIdRef = useRef(selectedParcelId);
+  const showParcelStatusRef = useRef(showParcelStatus);
   const previousSelectedParcelIdRef = useRef(selectedParcelId);
 
   useEffect(() => {
@@ -125,13 +268,17 @@ export function ParcelMap({
   }, [selectedParcelId]);
 
   useEffect(() => {
+    showParcelStatusRef.current = showParcelStatus;
+  }, [showParcelStatus]);
+
+  useEffect(() => {
     if (!containerRef.current || mapRef.current) {
       return;
     }
 
     const container = containerRef.current;
-    const clusterMarkers: maplibregl.Marker[] = [];
-    const parcelMarkers: maplibregl.Marker[] = [];
+    const clusterMarkers: ClusterMarkerRecord[] = [];
+    const parcelMarkers: ParcelMarkerRecord[] = [];
     const map = new maplibregl.Map({
       container,
       style: {
@@ -178,7 +325,7 @@ export function ParcelMap({
     );
     map.addControl(
       new maplibregl.NavigationControl({ showCompass: false }),
-      'top-right',
+      'top-left',
     );
 
     map.on('load', () => {
@@ -192,35 +339,22 @@ export function ParcelMap({
         type: 'fill',
         source: PARCEL_SOURCE_ID,
         paint: {
-          'fill-color': [
-            'case',
-            ['==', ['get', 'id'], selectedParcelIdRef.current ?? ''],
-            '#315c4a',
-            ['==', ['get', 'moistureStatus'], 'critical'],
-            '#b86b4b',
-            ['==', ['get', 'moistureStatus'], 'watch'],
-            '#c99850',
-            '#7d9b83',
-          ],
-          'fill-opacity': [
-            'case',
-            ['==', ['get', 'id'], selectedParcelIdRef.current ?? ''],
-            0.78,
-            0.58,
-          ],
+          'fill-color': getParcelFillColor(showParcelStatusRef.current),
+          'fill-opacity': showParcelStatusRef.current ? 0.7 : 0.6,
         },
       });
 
       createClusterPoints(parcels).features.forEach((feature) => {
-        const markerElement = createMapLabelElement(
-          `${feature.properties.label} · 6`,
-        );
-        clusterMarkers.push(
-          new maplibregl.Marker({ element: markerElement })
-            .setLngLat(feature.geometry.coordinates as [number, number])
-            .addTo(map),
-        );
+        const markerElement = createMapLabelElement(feature.properties.label);
+        const marker = new maplibregl.Marker({ element: markerElement })
+          .setLngLat(feature.geometry.coordinates as [number, number])
+          .addTo(map);
+        const markerRecord = { marker, properties: feature.properties };
+
+        updateClusterMarker(markerRecord, showParcelStatusRef.current);
+        clusterMarkers.push(markerRecord);
       });
+      clusterMarkersRef.current = clusterMarkers;
 
       parcels.features.forEach((parcel) => {
         const markerElement = createMapLabelElement(
@@ -228,23 +362,29 @@ export function ParcelMap({
           true,
         );
         const center = getFeatureBounds(parcel).getCenter();
-        parcelMarkers.push(
-          new maplibregl.Marker({
-            element: markerElement,
-            anchor: 'bottom',
-            offset: [0, -8],
-          })
-            .setLngLat(center)
-            .addTo(map),
-        );
+        const marker = new maplibregl.Marker({
+          element: markerElement,
+          anchor: 'bottom',
+          offset: [0, -8],
+        })
+          .setLngLat(center)
+          .addTo(map);
+        const markerRecord = {
+          marker,
+          moistureStatus: parcel.properties.moistureStatus,
+        };
+
+        updateParcelMarker(markerRecord, showParcelStatusRef.current);
+        parcelMarkers.push(markerRecord);
       });
+      parcelMarkersRef.current = parcelMarkers;
 
       const updateMarkerVisibility = () => {
         const showParcelLabels = map.getZoom() >= 10;
-        clusterMarkers.forEach((marker) => {
+        clusterMarkers.forEach(({ marker }) => {
           marker.getElement().style.display = showParcelLabels ? 'none' : '';
         });
-        parcelMarkers.forEach((marker) => {
+        parcelMarkers.forEach(({ marker }) => {
           marker.getElement().style.display = showParcelLabels ? '' : 'none';
         });
       };
@@ -259,7 +399,7 @@ export function ParcelMap({
           'line-width': [
             'case',
             ['==', ['get', 'id'], selectedParcelIdRef.current ?? ''],
-            3,
+            4,
             1.5,
           ],
         },
@@ -274,7 +414,7 @@ export function ParcelMap({
         source: CLUSTER_SOURCE_ID,
         maxzoom: 10,
         paint: {
-          'circle-color': '#315c4a',
+          'circle-color': getClusterCircleColor(showParcelStatusRef.current),
           'circle-opacity': 0.86,
           'circle-radius': 11,
           'circle-stroke-color': '#ffffff',
@@ -286,18 +426,30 @@ export function ParcelMap({
         data: affectedSector,
       });
       map.addLayer({
-        id: 'affected-sector-fill',
+        id: SECTOR_FILL_LAYER_ID,
         type: 'fill',
         source: SECTOR_SOURCE_ID,
+        layout: {
+          visibility:
+            selectedParcelIdRef.current === affectedSector.properties.parcelId
+              ? 'visible'
+              : 'none',
+        },
         paint: {
           'fill-color': '#f0b35d',
           'fill-opacity': 0.55,
         },
       });
       map.addLayer({
-        id: 'affected-sector-line',
+        id: SECTOR_LINE_LAYER_ID,
         type: 'line',
         source: SECTOR_SOURCE_ID,
+        layout: {
+          visibility:
+            selectedParcelIdRef.current === affectedSector.properties.parcelId
+              ? 'visible'
+              : 'none',
+        },
         paint: {
           'line-color': '#7b3f22',
           'line-width': 2.5,
@@ -350,8 +502,10 @@ export function ParcelMap({
 
     return () => {
       resizeObserver.disconnect();
-      clusterMarkers.forEach((marker) => marker.remove());
-      parcelMarkers.forEach((marker) => marker.remove());
+      clusterMarkers.forEach(({ marker }) => marker.remove());
+      clusterMarkersRef.current = [];
+      parcelMarkers.forEach(({ marker }) => marker.remove());
+      parcelMarkersRef.current = [];
       map.remove();
       mapRef.current = null;
     };
@@ -365,28 +519,39 @@ export function ParcelMap({
 
     const source = map.getSource(PARCEL_SOURCE_ID) as GeoJSONSource | undefined;
     source?.setData(parcels);
-    map.setPaintProperty(PARCEL_FILL_LAYER_ID, 'fill-color', [
-      'case',
-      ['==', ['get', 'id'], selectedParcelId ?? ''],
-      '#315c4a',
-      ['==', ['get', 'moistureStatus'], 'critical'],
-      '#b86b4b',
-      ['==', ['get', 'moistureStatus'], 'watch'],
-      '#c99850',
-      '#7d9b83',
-    ]);
-    map.setPaintProperty(PARCEL_FILL_LAYER_ID, 'fill-opacity', [
-      'case',
-      ['==', ['get', 'id'], selectedParcelId ?? ''],
-      0.78,
-      0.58,
-    ]);
+    map.setPaintProperty(
+      PARCEL_FILL_LAYER_ID,
+      'fill-color',
+      getParcelFillColor(showParcelStatus),
+    );
+    map.setPaintProperty(
+      PARCEL_FILL_LAYER_ID,
+      'fill-opacity',
+      showParcelStatus ? 0.7 : 0.6,
+    );
+    map.setPaintProperty(
+      CLUSTER_LAYER_ID,
+      'circle-color',
+      getClusterCircleColor(showParcelStatus),
+    );
+    clusterMarkersRef.current.forEach((markerRecord) => {
+      updateClusterMarker(markerRecord, showParcelStatus);
+    });
+    parcelMarkersRef.current.forEach((markerRecord) => {
+      updateParcelMarker(markerRecord, showParcelStatus);
+    });
     map.setPaintProperty(PARCEL_LINE_LAYER_ID, 'line-width', [
       'case',
       ['==', ['get', 'id'], selectedParcelId ?? ''],
-      3,
+      4,
       1.5,
     ]);
+    const sectorVisibility =
+      selectedParcelId === affectedSector.properties.parcelId
+        ? 'visible'
+        : 'none';
+    map.setLayoutProperty(SECTOR_FILL_LAYER_ID, 'visibility', sectorVisibility);
+    map.setLayoutProperty(SECTOR_LINE_LAYER_ID, 'visibility', sectorVisibility);
 
     if (previousSelectedParcelIdRef.current === selectedParcelId) {
       return;
@@ -403,7 +568,12 @@ export function ParcelMap({
         maxZoom: 16,
       });
     }
-  }, [parcels, selectedParcelId]);
+  }, [
+    affectedSector.properties.parcelId,
+    parcels,
+    selectedParcelId,
+    showParcelStatus,
+  ]);
 
   return (
     <div

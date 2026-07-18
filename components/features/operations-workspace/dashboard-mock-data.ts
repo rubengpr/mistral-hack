@@ -84,31 +84,44 @@ const sensorsDashboardData: SensorsDashboardData = {
   summary: {
     totalSensors: sensorData.reduce((total, p) => total + p.sensors.length, 0),
     activeSensors: sensorData.reduce(
-      (total, p) => total + p.sensors.filter((s) => s.metadata.status === 'active').length,
+      (total, p) =>
+        total + p.sensors.filter((s) => s.metadata.status === 'active').length,
       0,
     ),
-    sensorsByType: sensorData.reduce((acc, p) => {
-      p.sensors.forEach((s) => {
-        acc[s.metadata.type] = (acc[s.metadata.type] || 0) + 1;
-      });
-      return acc;
-    }, {} as Record<string, number>),
-    sensorsByStatus: sensorData.reduce((acc, p) => {
-      p.sensors.forEach((s) => {
-        acc[s.metadata.status] = (acc[s.metadata.status] || 0) + 1;
-      });
-      return acc;
-    }, {} as Record<string, number>),
+    sensorsByType: sensorData.reduce(
+      (acc, p) => {
+        p.sensors.forEach((s) => {
+          acc[s.metadata.type] = (acc[s.metadata.type] || 0) + 1;
+        });
+        return acc;
+      },
+      {} as Record<string, number>,
+    ),
+    sensorsByStatus: sensorData.reduce(
+      (acc, p) => {
+        p.sensors.forEach((s) => {
+          acc[s.metadata.status] = (acc[s.metadata.status] || 0) + 1;
+        });
+        return acc;
+      },
+      {} as Record<string, number>,
+    ),
     alertCount: sensorData.reduce(
-      (total, p) => total + p.sensors.filter((s) => s.alertStatus.status !== 'normal').length,
+      (total, p) =>
+        total +
+        p.sensors.filter((s) => s.alertStatus.status !== 'normal').length,
       0,
     ),
     criticalCount: sensorData.reduce(
-      (total, p) => total + p.sensors.filter((s) => s.alertStatus.status === 'critical').length,
+      (total, p) =>
+        total +
+        p.sensors.filter((s) => s.alertStatus.status === 'critical').length,
       0,
     ),
     warningCount: sensorData.reduce(
-      (total, p) => total + p.sensors.filter((s) => s.alertStatus.status === 'warning').length,
+      (total, p) =>
+        total +
+        p.sensors.filter((s) => s.alertStatus.status === 'warning').length,
       0,
     ),
   },
@@ -118,7 +131,9 @@ const sensorsDashboardData: SensorsDashboardData = {
     moistureStatus: p.moistureStatus,
     sensors: p.sensors,
   })),
-  allSensorReadings: sensorData.flatMap((p) => p.sensors.flatMap((s) => s.readings)),
+  allSensorReadings: sensorData.flatMap((p) =>
+    p.sensors.flatMap((s) => s.readings),
+  ),
 };
 
 export const dashboardMockData: DashboardViewModel = {
@@ -138,6 +153,7 @@ export const dashboardMockData: DashboardViewModel = {
     confidence: finding.confidence,
     recommendedVerification: finding.recommendedVerification,
   },
+  reviewSummaries: scenario.reviewSummaries,
   moistureByParcelId: Object.fromEntries(
     scenario.parcels.features.map((parcel) => [
       parcel.properties.id,
