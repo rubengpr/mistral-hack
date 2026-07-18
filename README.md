@@ -1,36 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Mistral Agricultural Assistant
 
-## Getting Started
+A minimal voice chat built with Next.js, shadcn/ui, the Mistral Conversations
+API, Voxtral realtime transcription, and Voxtral text-to-speech.
 
-First, run the development server:
+Selecting the microphone starts conversation mode. It detects one second of
+silence, sends the completed voice turn, speaks the answer, and starts listening
+again. The conversation-mode switch can end the continuous session.
+
+The current session is kept only in browser memory. Requests use `store: false`,
+so the application does not provide persistent conversation history.
+
+## Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
+cp .env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Add your Mistral API key to `.env.local`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```text
+MISTRAL_API_KEY=your-api-key
+MISTRAL_MODEL=mistral-small-latest
+MISTRAL_TRANSCRIPTION_MODEL=voxtral-mini-latest
+MISTRAL_REALTIME_TRANSCRIPTION_MODEL=voxtral-mini-transcribe-realtime-2602
+MISTRAL_SPEECH_MODEL=voxtral-mini-tts-2603
+MISTRAL_VOICE_ID=c69964a6-ab8b-4f8a-9465-ec0925096ec8
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The default voice is the Mistral preset `Paul - Neutral`. Replace
+`MISTRAL_VOICE_ID` to use another preset or custom voice.
 
-## Learn More
+The browser receives only a short-lived, model-scoped realtime token. The
+long-lived Mistral API key remains on the server.
 
-To learn more about Next.js, take a look at the following resources:
+Then start the app:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+pnpm dev
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Open [http://localhost:3000](http://localhost:3000).
 
-## Deploy on Vercel
+## Verification
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test:run
+pnpm build
+```
