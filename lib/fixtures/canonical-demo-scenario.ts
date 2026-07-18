@@ -21,14 +21,9 @@ import type {
 export const AFFECTED_PARCEL_ID = 'parcel-herault-06';
 export const AFFECTED_SECTOR_ID = 'sector-b';
 export const ACTIVE_FINDING_ID = 'finding-soil-moisture-01';
+export const REVIEW_PARCEL_ID = 'parcel-aude-05';
 
 const INITIAL_PARCEL_ID = 'parcel-herault-01';
-const WATCH_PARCEL_IDS = new Set([
-  'parcel-herault-04',
-  'parcel-aude-05',
-  'parcel-gard-03',
-  'parcel-pyrenees-orientales-04',
-]);
 const PARCEL_NAMES = [
   'Les Terrasses du Soleil',
   'Le Clos des Oliviers',
@@ -82,12 +77,16 @@ function moistureStatus(parcelId: string): ParcelMoistureStatus {
     return 'critical';
   }
 
-  return WATCH_PARCEL_IDS.has(parcelId) ? 'watch' : 'stable';
+  return parcelId === REVIEW_PARCEL_ID ? 'watch' : 'stable';
 }
 
 function currentMoisture(parcelId: string, index: number) {
   if (parcelId === AFFECTED_PARCEL_ID) {
     return 16;
+  }
+
+  if (parcelId === REVIEW_PARCEL_ID) {
+    return 24;
   }
 
   return 29 + ((index * 3) % 8);
@@ -276,6 +275,28 @@ const canonicalScenario: DemoScenario = {
       confidence: 0.92,
       recommendedVerification:
         'Inspect the irrigation line and verify vine condition in Sector B.',
+    },
+  ],
+  reviewSummaries: [
+    {
+      parcelId: AFFECTED_PARCEL_ID,
+      status: 'critical',
+      title: 'Visit recommended today',
+      summary:
+        'Soil moisture in Sector B has continued to decline beyond its normal irrigation cycle, with no recovery detected during the morning review.',
+      generatedAt: '2026-07-18T08:00:00Z',
+      source: 'mistral-morning-review',
+      quality: 'simulated',
+    },
+    {
+      parcelId: REVIEW_PARCEL_ID,
+      status: 'watch',
+      title: 'Review the next readings',
+      summary:
+        'Soil moisture is trending below its recent baseline, but the change is not yet severe enough to justify an immediate field visit.',
+      generatedAt: '2026-07-18T08:00:00Z',
+      source: 'mistral-morning-review',
+      quality: 'simulated',
     },
   ],
 };

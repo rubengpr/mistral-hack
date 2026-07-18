@@ -81,6 +81,9 @@ const chatRequestSchema = z.object({
             id: z.string().trim().min(1).max(100),
             content: z.string().trim().min(1).max(2_000),
             createdAt: z.iso.datetime(),
+            observation: z.string().trim().min(1).max(1_000).optional(),
+            assessment: z.string().trim().min(1).max(1_000).optional(),
+            uncertainty: z.string().trim().min(1).max(1_000).optional(),
           }),
         )
         .max(20),

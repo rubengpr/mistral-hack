@@ -37,6 +37,9 @@ const inspectionSchema = z.object({
       id: z.string(),
       content: z.string(),
       createdAt: z.string(),
+      observation: z.string().optional(),
+      assessment: z.string().optional(),
+      uncertainty: z.string().optional(),
     }),
   ),
   photos: z.array(
