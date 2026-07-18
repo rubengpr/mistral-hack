@@ -38,6 +38,9 @@ MISTRAL_TRANSCRIPTION_MODEL=voxtral-mini-2602
 MISTRAL_TRANSCRIPTION_LANGUAGE=es
 MISTRAL_SPEECH_MODEL=voxtral-mini-tts-2603
 MISTRAL_VOICE_ID=c69964a6-ab8b-4f8a-9465-ec0925096ec8
+RESEND_API_KEY=your-resend-api-key
+RESEND_FROM_EMAIL=Vinea <onboarding@resend.dev>
+REPORT_APPROVAL_SECRET=generate-a-long-random-secret
 ```
 
 The configured fallback voice is the Mistral preset `Paul - Neutral`. Replace
@@ -45,6 +48,11 @@ The configured fallback voice is the Mistral preset `Paul - Neutral`. Replace
 
 Recorded turns, chat, and speech synthesis all pass through server routes. The
 long-lived Mistral API key never reaches the browser.
+
+The report workflow generates a server-rendered PDF preview and requires an
+explicit confirmation before sending it to the canonical demo recipient. The
+Resend test sender can only deliver to an address authorized by the Resend
+account; use a verified domain sender for any other recipient.
 
 Then start the app:
 
