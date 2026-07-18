@@ -7,6 +7,7 @@ import type {
 import type { PersistedReportState } from '@/types/inspection-report';
 
 export type ParcelMoistureStatus = 'stable' | 'watch' | 'critical';
+export type OperationalStatus = 'normal' | 'review' | 'critical';
 export type ParcelCluster = 'herault' | 'aude' | 'gard' | 'pyrenees-orientales';
 export type ParcelGeometry = Polygon | MultiPolygon;
 
@@ -25,6 +26,7 @@ export type ParcelProperties = {
   areaHectares: number;
   currentSoilMoisturePercent: number;
   moistureStatus: ParcelMoistureStatus;
+  operationalStatus: OperationalStatus;
   lastReviewedAt: string;
   sectorCount: number;
 };
@@ -42,7 +44,7 @@ export type ParcelCollection = FeatureCollection<
 >;
 export type SectorFeature = Feature<Polygon, SectorProperties>;
 
-export type EvidenceQuality = 'simulated';
+export type EvidenceQuality = 'modelled' | 'simulated';
 
 type ObservationBase = {
   id: string;
@@ -80,6 +82,13 @@ export type IrrigationEvent = {
   quality: EvidenceQuality;
 };
 
+export type IrrigationPlan = {
+  parcelId: string;
+  scheduledDepthMillimeters: number;
+  periodDays: 7;
+  quality: 'simulated';
+};
+
 export type FindingSeverity = 'medium' | 'high';
 export type FindingStatus = 'open' | 'investigating' | 'reviewed';
 
@@ -104,12 +113,21 @@ export type Finding = {
 
 export type ParcelReviewSummary = {
   parcelId: string;
-  status: Exclude<ParcelMoistureStatus, 'stable'>;
+  status: Exclude<OperationalStatus, 'normal'>;
   title: string;
   summary: string;
   generatedAt: string;
   source: 'mistral-morning-review';
   quality: EvidenceQuality;
+  evidence?: {
+    recentPrecipitationMillimeters: number;
+    forecastPrecipitationMillimeters: number;
+    forecastEvapotranspirationMillimeters: number;
+    scheduledIrrigationMillimeters: number;
+    forecastGapMillimeters: number;
+    forecastStartsOn: string;
+    forecastEndsOn: string;
+  };
 };
 
 export type ConversationTurn = {
@@ -117,6 +135,7 @@ export type ConversationTurn = {
   role: 'technician' | 'assistant';
   content: string;
   createdAt: string;
+  photoIds?: string[];
 };
 
 export type InspectionNote = {
@@ -126,6 +145,7 @@ export type InspectionNote = {
   observation?: string;
   assessment?: string;
   uncertainty?: string;
+  nextStep?: string;
 };
 
 export type FieldPhotoAnalysis = {
@@ -169,6 +189,7 @@ export type DemoScenario = {
   sectors: SectorFeature[];
   observations: EvidenceObservation[];
   irrigationEvents: IrrigationEvent[];
+  irrigationPlans: IrrigationPlan[];
   findings: Finding[];
   reviewSummaries: ParcelReviewSummary[];
 };
@@ -178,5 +199,6 @@ export type DemoState = {
   selectedParcelId: string;
   activeFindingId: string;
   activeInspection: Inspection;
+  parcelNotes: Record<string, InspectionNote[]>;
   report?: PersistedReportState;
 };

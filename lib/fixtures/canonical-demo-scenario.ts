@@ -21,7 +21,8 @@ import type {
 export const AFFECTED_PARCEL_ID = 'parcel-herault-06';
 export const AFFECTED_SECTOR_ID = 'sector-b';
 export const ACTIVE_FINDING_ID = 'finding-soil-moisture-01';
-export const REVIEW_PARCEL_ID = 'parcel-aude-05';
+export const REVIEW_PARCEL_ID = 'parcel-gard-01';
+export const FALLBACK_REVIEW_CLUSTER: ParcelCluster = 'gard';
 
 const INITIAL_PARCEL_ID = 'parcel-herault-01';
 const PARCEL_NAMES = [
@@ -77,16 +78,23 @@ function moistureStatus(parcelId: string): ParcelMoistureStatus {
     return 'critical';
   }
 
-  return parcelId === REVIEW_PARCEL_ID ? 'watch' : 'stable';
+  return 'stable';
+}
+
+function operationalStatus(
+  parcelId: string,
+  cluster: ParcelCluster,
+): 'normal' | 'review' | 'critical' {
+  if (parcelId === AFFECTED_PARCEL_ID) {
+    return 'critical';
+  }
+
+  return cluster === FALLBACK_REVIEW_CLUSTER ? 'review' : 'normal';
 }
 
 function currentMoisture(parcelId: string, index: number) {
   if (parcelId === AFFECTED_PARCEL_ID) {
     return 16;
-  }
-
-  if (parcelId === REVIEW_PARCEL_ID) {
-    return 24;
   }
 
   return 29 + ((index * 3) % 8);
@@ -112,6 +120,7 @@ const parcels: ParcelFeature[] = sourceParcels.features.map(
       areaHectares: properties.areaHectares,
       currentSoilMoisturePercent: currentMoisture(properties.id, index),
       moistureStatus: moistureStatus(properties.id),
+      operationalStatus: operationalStatus(properties.id, properties.cluster),
       lastReviewedAt: `2026-07-${String(17 - (index % 4)).padStart(2, '0')}T08:00:00Z`,
       sectorCount: 2 + (index % 3),
     },
@@ -196,6 +205,22 @@ const soilMoistureObservations = seasonalMoistureSeries.map(
   ({ timestamp, value }) => moistureObservation(timestamp, value),
 );
 
+const referenceMoistureValues = [30, 34, 33, 32, 31, 30, 29];
+const referenceMoistureObservations: SoilMoistureObservation[] =
+  seasonalMoistureSeries.slice(-7).map(({ timestamp }, index) => ({
+    id: `moisture-${AFFECTED_PARCEL_ID}-sector-reference-${timestamp.slice(0, 10)}`,
+    source: 'soil-moisture-sensor',
+    observedAt: timestamp,
+    parcelId: AFFECTED_PARCEL_ID,
+    sectorId: 'sector-reference',
+    metric: 'soil-moisture',
+    value: referenceMoistureValues[index] ?? 29,
+    unit: 'percent',
+    quality: 'simulated',
+    confidence: 0.96,
+    rawReference: `fixture://soil-moisture/${AFFECTED_PARCEL_ID}/sector-reference/${timestamp.slice(0, 10)}`,
+  }));
+
 const irrigationEvents = seasonalMoistureSeries
   .filter(({ irrigationApplied }) => irrigationApplied)
   .map(({ timestamp }) => ({
@@ -207,6 +232,13 @@ const irrigationEvents = seasonalMoistureSeries
     status: 'completed' as const,
     quality: 'simulated' as const,
   }));
+
+const irrigationPlans = parcels.map(({ properties }) => ({
+  parcelId: properties.id,
+  scheduledDepthMillimeters: 45,
+  periodDays: 7 as const,
+  quality: 'simulated' as const,
+}));
 
 const weatherObservations: EvidenceObservation[] = seasonalMoistureSeries.map(
   ({ timestamp, rainfallMillimeters }) => {
@@ -246,15 +278,20 @@ const canonicalScenario: DemoScenario = {
       geometry: createAffectedSectorGeometry(),
     },
   ],
-  observations: [...soilMoistureObservations, ...weatherObservations],
+  observations: [
+    ...soilMoistureObservations,
+    ...referenceMoistureObservations,
+    ...weatherObservations,
+  ],
   irrigationEvents,
+  irrigationPlans,
   findings: [
     {
       id: ACTIVE_FINDING_ID,
       type: 'soil-moisture-drop',
-      title: 'Unexpected soil-moisture decline',
+      title: 'Irrigation may not be reaching Sector B',
       summary:
-        'Sector B has continued to dry beyond its normal irrigation cycle. No recovery was detected this morning.',
+        'Irrigation ran for 90 minutes on July 12. Moisture increased in the reference area, showing that the irrigation reached the parcel, but Sector B fell from 34% to 16%. Water may not be reaching this sector because its hose could be damaged or blocked. Check the line today.',
       severity: 'high',
       status: 'open',
       parcelId: AFFECTED_PARCEL_ID,
@@ -268,13 +305,14 @@ const canonicalScenario: DemoScenario = {
         ...soilMoistureObservations
           .filter(({ observedAt }) => observedAt >= '2026-07-14T08:00:00Z')
           .map(({ id }) => id),
+        ...referenceMoistureObservations.map(({ id }) => id),
         ...weatherObservations
           .filter(({ observedAt }) => observedAt >= '2026-07-14T08:00:00Z')
           .map(({ id }) => id),
       ],
       confidence: 0.92,
       recommendedVerification:
-        'Inspect the irrigation line and verify vine condition in Sector B.',
+        'Check the irrigation hose in Sector B today and confirm whether it is damaged or blocked before changing the irrigation programme.',
     },
   ],
   reviewSummaries: [
@@ -283,21 +321,34 @@ const canonicalScenario: DemoScenario = {
       status: 'critical',
       title: 'Visit recommended today',
       summary:
-        'Soil moisture in Sector B has continued to decline beyond its normal irrigation cycle, with no recovery detected during the morning review.',
+        'Irrigation ran for 90 minutes on July 12. Moisture increased elsewhere, but Sector B fell from 34% to 16%. Its irrigation hose may be damaged or blocked, so check the line today.',
       generatedAt: '2026-07-18T08:00:00Z',
       source: 'mistral-morning-review',
       quality: 'simulated',
     },
-    {
-      parcelId: REVIEW_PARCEL_ID,
-      status: 'watch',
-      title: 'Review the next readings',
-      summary:
-        'Soil moisture is trending below its recent baseline, but the change is not yet severe enough to justify an immediate field visit.',
-      generatedAt: '2026-07-18T08:00:00Z',
-      source: 'mistral-morning-review',
-      quality: 'simulated',
-    },
+    ...parcels
+      .filter(
+        ({ properties }) => properties.cluster === FALLBACK_REVIEW_CLUSTER,
+      )
+      .map(({ properties }) => ({
+        parcelId: properties.id,
+        status: 'review' as const,
+        title: 'Irrigation plan review recommended',
+        summary:
+          'The seven-day outlook indicates no meaningful rainfall and a larger atmospheric water demand than the scheduled irrigation covers. Recalculate irrigation depth, volume, or duration for this parcel.',
+        generatedAt: '2026-07-18T08:00:00Z',
+        source: 'mistral-morning-review' as const,
+        quality: 'simulated' as const,
+        evidence: {
+          recentPrecipitationMillimeters: 0.02,
+          forecastPrecipitationMillimeters: 0,
+          forecastEvapotranspirationMillimeters: 61.74,
+          scheduledIrrigationMillimeters: 45,
+          forecastGapMillimeters: 16.74,
+          forecastStartsOn: '2026-07-18',
+          forecastEndsOn: '2026-07-24',
+        },
+      })),
   ],
 };
 
@@ -317,6 +368,7 @@ const canonicalState: DemoState = {
     actions: [],
     nextStep: 'Verify irrigation delivery and capture field evidence.',
   },
+  parcelNotes: {},
 };
 
 function clone<T>(value: T): T {
