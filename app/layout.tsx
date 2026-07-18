@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import './globals.css';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 export const metadata: Metadata = {
-  title: 'Hackathon Starter',
-  description: 'Generic Next.js hackathon scaffold',
+  title: 'Agricultural Operations Assistant',
+  description:
+    'A responsive workspace that turns agricultural evidence into prioritized field work.',
 };
 
 export default function RootLayout({
@@ -14,7 +16,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full antialiased">
-      <body className="min-h-full flex flex-col">
+      <body className="flex min-h-full flex-col font-sans">
         <TooltipProvider>{children}</TooltipProvider>
       </body>
     </html>
