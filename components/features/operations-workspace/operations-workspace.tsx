@@ -82,6 +82,9 @@ export function OperationsWorkspace({ route }: OperationsWorkspaceProps) {
     ) ?? data.parcels.features[0];
   const selectedParcel = selectedParcelFeature.properties;
   const isAffectedParcel = selectedParcel.id === data.finding.parcelId;
+  const selectedReviewSummary = data.reviewSummaries.find(
+    ({ parcelId }) => parcelId === selectedParcel.id,
+  );
   const selectedParcelSensorCount =
     sensorsDashboardData.parcels.find(
       ({ parcelId }) => parcelId === selectedParcel.id,
@@ -93,6 +96,11 @@ export function OperationsWorkspace({ route }: OperationsWorkspaceProps) {
     repository.save({ ...state, selectedParcelId: parcelId });
     window.dispatchEvent(new Event(DEMO_SELECTION_EVENT));
     setIsParcelDetailsOpen(true);
+  }
+
+  function askVineaAboutParcel(parcelId: string) {
+    selectParcel(parcelId);
+    setIsAssistantOpen(true);
   }
 
   return (
@@ -167,9 +175,11 @@ export function OperationsWorkspace({ route }: OperationsWorkspaceProps) {
                 expanded
                 finding={isAffectedParcel ? data.finding : undefined}
                 isDetailsOpen={isParcelDetailsOpen}
+                onAskVinea={askVineaAboutParcel}
                 onCloseDetails={() => setIsParcelDetailsOpen(false)}
                 onSelectParcel={selectParcel}
                 parcels={data.parcels}
+                reviewSummary={selectedReviewSummary}
                 selectedParcel={selectedParcel}
                 sensorCount={selectedParcelSensorCount}
               />
@@ -177,6 +187,7 @@ export function OperationsWorkspace({ route }: OperationsWorkspaceProps) {
           </div>
 
           <AssistantPanel
+            key={selectedParcelId}
             onOpenChange={setIsAssistantOpen}
             open={isAssistantOpen}
             selectedParcelId={selectedParcelId}

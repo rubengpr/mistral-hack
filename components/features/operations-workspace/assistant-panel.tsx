@@ -6,6 +6,7 @@ import {
   AudioLines,
   Camera,
   CircleCheck,
+  ClipboardCheck,
   FileText,
   Mic,
   Send,
@@ -53,6 +54,7 @@ import { ReportPreviewDialog } from '@/components/features/operations-workspace/
 import { useVoiceConversation } from '@/hooks/use-voice-conversation';
 import { ASSISTANT_IDENTITY } from '@/lib/assistant-identity';
 import { createBrowserDemoStateRepository } from '@/lib/db/local-storage-demo-state-repository';
+import { applySuccessfulInspectionTurn } from '@/lib/services/inspection-state-service';
 import {
   FIELD_PHOTO_INPUT_MAX_BYTES,
   prepareFieldPhoto,
@@ -63,6 +65,7 @@ import type {
   MistralChatResponse,
 } from '@/types/mistral-chat';
 import type { AgentActionEvent } from '@/types/agent-tools';
+import type { Inspection } from '@/types/agricultural-operations';
 import type {
   ReportArtifact,
   ReportDeliveryResult,
@@ -121,6 +124,7 @@ function VoiceControl({ active, onToggle, state }: VoiceControlProps) {
 
 type ChatContentProps = {
   error: string | null;
+  inspection: Inspection | null;
   isAnalyzingPhoto: boolean;
   messages: MistralChatMessage[];
   onInputError: (message: string) => void;
@@ -136,6 +140,87 @@ type ChatContentProps = {
     toggleConversation: () => Promise<void>;
   };
 };
+
+function InspectionRecordCard({ inspection }: { inspection: Inspection }) {
+  const note = inspection.notes.at(-1);
+  const photo = inspection.photos.at(-1);
+  const action = inspection.actions.at(-1);
+
+  if (!note && !photo) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-lg border bg-muted/35 p-3" role="region" aria-label="Inspection record">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <ClipboardCheck className="size-4" aria-hidden="true" />
+          Inspection record
+        </div>
+        <Badge variant="secondary">Saved locally</Badge>
+      </div>
+
+      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground sm:hidden">
+        <span>{inspection.conversation.length} conversation turns</span>
+        {photo ? <span>· Photo saved</span> : null}
+      </div>
+
+      <div className="mt-3 hidden gap-3 text-xs sm:grid">
+        {photo ? (
+          <div className="flex gap-3">
+            <Image
+              alt="Saved field evidence"
+              className="size-16 shrink-0 rounded-md object-cover"
+              height={64}
+              src={photo.dataUrl}
+              unoptimized
+              width={64}
+            />
+            <div className="min-w-0">
+              <p className="font-medium">Field evidence</p>
+              <p className="mt-1 line-clamp-3 text-muted-foreground">
+                {photo.analysis?.observation ??
+                  'A technician-provided field photo is attached.'}
+              </p>
+            </div>
+          </div>
+        ) : null}
+
+        {note ? (
+          <div>
+            <p className="font-medium">Latest field note</p>
+            <p className="mt-1 text-muted-foreground">
+              {note.observation ?? note.content}
+            </p>
+            {note.assessment ? (
+              <p className="mt-1 text-muted-foreground">{note.assessment}</p>
+            ) : null}
+            {note.uncertainty ? (
+              <p className="mt-1 text-muted-foreground">
+                Uncertainty: {note.uncertainty}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="grid grid-cols-2 gap-3 border-t pt-3">
+          <div>
+            <p className="font-medium">Completed action</p>
+            <p className="mt-1 text-muted-foreground">
+              {action?.description ?? 'No completed action recorded.'}
+            </p>
+          </div>
+          <div>
+            <p className="font-medium">Next step</p>
+            <p className="mt-1 text-muted-foreground">
+              {inspection.nextStep}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function FieldPhotoPreview() {
   const attachments = usePromptInputAttachments();
@@ -238,6 +323,19 @@ function isAgentAction(value: unknown): value is AgentActionEvent {
     return true;
   }
 
+  if (action.name === 'save_inspection_note' && 'draft' in action) {
+    const draft = action.draft as Record<string, unknown>;
+
+    return (
+      typeof draft.observation === 'string' &&
+      typeof draft.assessment === 'string' &&
+      typeof draft.uncertainty === 'string' &&
+      typeof draft.nextStep === 'string' &&
+      (draft.completedAction === undefined ||
+        typeof draft.completedAction === 'string')
+    );
+  }
+
   if (action.name !== 'generate_inspection_report' || !('artifact' in action)) {
     return false;
   }
@@ -265,8 +363,30 @@ function getErrorMessage(value: unknown) {
   return 'Mistral could not answer right now. Please try again.';
 }
 
+function getPersistedChatMessages(inspection: Inspection) {
+  return inspection.conversation.map<MistralChatMessage>((turn) => ({
+    id: turn.id,
+    role: turn.role === 'technician' ? 'user' : 'assistant',
+    content: turn.content,
+  }));
+}
+
+function getBrowserInspection(selectedParcelId: string) {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const activeInspection =
+    createBrowserDemoStateRepository().load().activeInspection;
+
+  return activeInspection.parcelId === selectedParcelId
+    ? activeInspection
+    : null;
+}
+
 function ChatContent({
   error,
+  inspection,
   isAnalyzingPhoto,
   messages,
   onInputError,
@@ -376,6 +496,8 @@ function ChatContent({
         <ConversationScrollButton />
       </Conversation>
 
+      {inspection ? <InspectionRecordCard inspection={inspection} /> : null}
+
       {error ? (
         <Alert variant="destructive">
           <AlertTitle>Message not sent</AlertTitle>
@@ -451,10 +573,17 @@ export function AssistantPanel({
   selectedParcelId,
 }: AssistantPanelProps) {
   const abortControllerRef = useRef<AbortController | null>(null);
-  const [messages, setMessages] = useState<MistralChatMessage[]>([]);
+  const [messages, setMessages] = useState<MistralChatMessage[]>(() => {
+    const activeInspection = getBrowserInspection(selectedParcelId);
+
+    return activeInspection ? getPersistedChatMessages(activeInspection) : [];
+  });
   const [status, setStatus] = useState<ChatStatus>('ready');
   const [error, setError] = useState<string | null>(null);
   const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState(false);
+  const [inspection, setInspection] = useState<Inspection | null>(() =>
+    getBrowserInspection(selectedParcelId),
+  );
   const [reportArtifact, setReportArtifact] = useState<ReportArtifact | null>(
     null,
   );
@@ -533,6 +662,7 @@ export function AssistantPanel({
     setIsAnalyzingPhoto(Boolean(file));
 
     try {
+      const technicianCreatedAt = new Date().toISOString();
       const photo = file ? await prepareFieldPhoto(file) : undefined;
       const content =
         technicianText ||
@@ -543,7 +673,7 @@ export function AssistantPanel({
         content,
         photo,
       };
-      const nextMessages = [...messages, userMessage];
+      const nextMessages = [...messages.slice(-39), userMessage];
 
       userMessageId = userMessage.id;
       setMessages(nextMessages);
@@ -586,60 +716,79 @@ export function AssistantPanel({
           );
         }
 
-        const repository = createBrowserDemoStateRepository();
-        const currentState = repository.load();
-
-        if (currentState.activeInspection.parcelId !== selectedParcelId) {
-          throw new Error(
-            'The selected parcel changed before the field photo could be saved.',
-          );
-        }
-
         persistedPhoto = {
           ...photo,
           analysis: payload.data.photoAnalysis.analysis,
         };
-        try {
-          repository.save({
-            ...currentState,
-            activeInspection: {
-              ...currentState.activeInspection,
-              status:
-                currentState.activeInspection.status === 'not-started'
-                  ? 'in-progress'
-                  : currentState.activeInspection.status,
-              photos: [
-                ...currentState.activeInspection.photos.filter(
-                  ({ id }) => id !== photo.id,
-                ),
-                {
-                  id: persistedPhoto.id,
-                  capturedAt: persistedPhoto.capturedAt,
-                  dataUrl: persistedPhoto.dataUrl,
-                  analysis: persistedPhoto.analysis,
-                },
-              ],
-            },
-          });
-        } catch {
-          throw new Error(
-            'The photo was analyzed but could not be saved in this browser. Remove an older photo or reset the demo, then try again.',
-          );
-        }
       }
 
+      const saveNoteAction = payload.data.actions.find(
+        (action) => action.name === 'save_inspection_note',
+      );
       const generatedReport = payload.data.actions.find(
         (action) => action.name === 'generate_inspection_report',
       );
 
-      if (generatedReport?.name === 'generate_inspection_report') {
-        const repository = createBrowserDemoStateRepository();
-        const currentState = repository.load();
+      if (saveNoteAction && generatedReport) {
+        throw new Error(
+          'Save and review the inspection note before generating its report.',
+        );
+      }
 
-        setReportArtifact(generatedReport.artifact);
-        setIsReportDialogOpen(true);
-        repository.save({
-          ...currentState,
+      const assistantCreatedAt = new Date().toISOString();
+      const assistantMessage: MistralChatMessage = {
+        id: nanoid(),
+        role: 'assistant',
+        content: payload.data.message,
+        actions: payload.data.actions.map((action) =>
+          action.name === 'save_inspection_note'
+            ? { ...action, label: 'Inspection note saved' }
+            : action,
+        ),
+      };
+      const repository = createBrowserDemoStateRepository();
+      const currentState = repository.load();
+      const matchingInspection =
+        currentState.activeInspection.parcelId === selectedParcelId;
+      let nextState = currentState;
+
+      if (matchingInspection) {
+        nextState = applySuccessfulInspectionTurn(currentState, {
+          selectedParcelId,
+          turn: {
+            technician: {
+              id: userMessage.id,
+              content: userMessage.content,
+              createdAt: technicianCreatedAt,
+            },
+            assistant: {
+              id: assistantMessage.id,
+              content: assistantMessage.content,
+              createdAt: assistantCreatedAt,
+            },
+          },
+          noteDraft:
+            saveNoteAction?.name === 'save_inspection_note'
+              ? saveNoteAction.draft
+              : undefined,
+          photo: persistedPhoto
+            ? {
+                id: persistedPhoto.id,
+                capturedAt: persistedPhoto.capturedAt,
+                dataUrl: persistedPhoto.dataUrl,
+                analysis: persistedPhoto.analysis,
+              }
+            : undefined,
+        });
+      } else if (saveNoteAction || persistedPhoto) {
+        throw new Error(
+          'The selected parcel changed before the field inspection could be saved.',
+        );
+      }
+
+      if (generatedReport?.name === 'generate_inspection_report') {
+        nextState = {
+          ...nextState,
           report: {
             reportId: generatedReport.artifact.report.id,
             recipient: generatedReport.artifact.recipient,
@@ -647,21 +796,33 @@ export function AssistantPanel({
             status: 'preview-ready',
             generatedAt: generatedReport.artifact.report.generatedAt,
           },
-        });
+        };
       }
 
-      setMessages((currentMessages) => [
-        ...currentMessages.map((message) =>
+      try {
+        const savedState = repository.save(nextState);
+
+        if (matchingInspection) {
+          setInspection(savedState.activeInspection);
+        }
+      } catch {
+        throw new Error(
+          'The field record could not be saved in this browser. Remove an older photo or reset the demo, then try again.',
+        );
+      }
+
+      if (generatedReport?.name === 'generate_inspection_report') {
+        setReportArtifact(generatedReport.artifact);
+        setIsReportDialogOpen(true);
+      }
+
+      setMessages([
+        ...nextMessages.map((message) =>
           message.id === userMessage.id && persistedPhoto
             ? { ...message, photo: persistedPhoto }
             : message,
         ),
-        {
-          id: nanoid(),
-          role: 'assistant',
-          content: payload.data.message,
-          actions: payload.data.actions,
-        },
+        assistantMessage,
       ]);
       setStatus('ready');
       return payload.data.message;
@@ -740,6 +901,7 @@ export function AssistantPanel({
         <CardContent className="flex min-h-0 flex-1 p-4">
           <ChatContent
             error={error}
+            inspection={inspection}
             isAnalyzingPhoto={isAnalyzingPhoto}
             messages={messages}
             onInputError={setError}
