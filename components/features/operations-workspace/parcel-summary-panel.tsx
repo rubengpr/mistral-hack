@@ -5,6 +5,7 @@ import {
   Droplets,
   LandPlot,
   MapPin,
+  RadioTower,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -21,6 +22,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
 import type { ActiveFinding } from '@/types/operations-dashboard';
 import type {
   ParcelProperties,
@@ -33,12 +35,18 @@ const DATE_FORMATTER = new Intl.DateTimeFormat('en', {
 });
 
 type SummaryItemProps = {
+  hideLabel?: boolean;
   icon: typeof MapPin;
   label: string;
   value: ReactNode;
 };
 
-function SummaryItem({ icon: Icon, label, value }: SummaryItemProps) {
+function SummaryItem({
+  hideLabel = false,
+  icon: Icon,
+  label,
+  value,
+}: SummaryItemProps) {
   return (
     <div className="flex min-w-0 gap-2.5">
       <Icon
@@ -46,7 +54,14 @@ function SummaryItem({ icon: Icon, label, value }: SummaryItemProps) {
         aria-hidden="true"
       />
       <div className="flex min-w-0 flex-col gap-0.5">
-        <dt className="text-xs text-muted-foreground">{label}</dt>
+        <dt
+          className={cn(
+            'text-xs text-muted-foreground',
+            hideLabel && 'sr-only',
+          )}
+        >
+          {label}
+        </dt>
         <dd className="text-sm font-medium break-words">{value}</dd>
       </div>
     </div>
@@ -58,6 +73,7 @@ type ParcelSummaryPanelProps = {
   finding?: ActiveFinding;
   onClose?: () => void;
   parcel: ParcelProperties;
+  sensorCount: number;
 };
 
 export function ParcelSummaryPanel({
@@ -65,6 +81,7 @@ export function ParcelSummaryPanel({
   finding,
   onClose,
   parcel,
+  sensorCount,
 }: ParcelSummaryPanelProps) {
   const activeFinding = finding?.parcelId === parcel.id ? finding : undefined;
   const sectorName = activeFinding ? affectedSector.properties.name : 'None';
@@ -108,21 +125,25 @@ export function ParcelSummaryPanel({
         <Separator />
         <dl className="mt-4 grid grid-cols-2 gap-4">
           <SummaryItem
+            hideLabel
             icon={MapPin}
             label="Location"
             value={`${parcel.municipality}, ${parcel.department}`}
           />
           <SummaryItem
+            hideLabel
             icon={LandPlot}
             label="Surface area"
             value={`${parcel.areaHectares} ha`}
           />
           <SummaryItem
+            hideLabel
             icon={Droplets}
             label="Soil moisture"
             value={`${parcel.currentSoilMoisturePercent}%`}
           />
           <SummaryItem
+            hideLabel
             icon={CalendarClock}
             label="Last reviewed"
             value={DATE_FORMATTER.format(new Date(parcel.lastReviewedAt))}
@@ -137,10 +158,22 @@ export function ParcelSummaryPanel({
             label="Affected sector"
             value={sectorName}
           />
+          <SummaryItem
+            hideLabel
+            icon={RadioTower}
+            label="Associated sensors"
+            value={`${sensorCount} sensor${sensorCount === 1 ? '' : 's'}`}
+          />
         </dl>
       </CardContent>
 
-      <CardFooter className="justify-end px-4 pb-4">
+      <CardFooter className="flex-wrap justify-end gap-2 px-4 pb-4">
+        <Button asChild size="sm" variant="outline">
+          <Link href={`/sensors#parcel-sensors-${parcel.id}`}>
+            View sensor data
+            <ArrowUpRight data-icon="inline-end" aria-hidden="true" />
+          </Link>
+        </Button>
         <Button asChild size="sm" variant="outline">
           <Link href={`/parcels/${parcel.id}`}>
             Open full details

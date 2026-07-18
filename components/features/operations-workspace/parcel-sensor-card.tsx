@@ -88,7 +88,10 @@ export function ParcelSensorCard({ parcel }: ParcelSensorCardProps) {
   ).length;
 
   return (
-    <Card className="overflow-hidden">
+    <Card
+      className="scroll-mt-4 overflow-hidden"
+      id={`parcel-sensors-${parcel.parcelId}`}
+    >
       <CardHeader className="flex-row items-start justify-between gap-3 p-4 pb-3">
         <div className="flex min-w-0 flex-col gap-1">
           <CardTitle className="truncate text-base">{parcel.parcelName}</CardTitle>

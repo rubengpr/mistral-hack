@@ -62,6 +62,23 @@ const demoStateSchema: z.ZodType<DemoState> = z.object({
   selectedParcelId: z.string(),
   activeFindingId: z.string(),
   activeInspection: inspectionSchema,
+  report: z
+    .object({
+      reportId: z.string(),
+      recipient: z.string(),
+      subject: z.string(),
+      status: z.enum([
+        'drafting',
+        'preview-ready',
+        'sending',
+        'sent',
+        'failed',
+      ]),
+      generatedAt: z.string(),
+      providerMessageId: z.string().optional(),
+      error: z.string().optional(),
+    })
+    .optional(),
 });
 
 export class LocalStorageDemoStateRepository implements DemoStateRepository {

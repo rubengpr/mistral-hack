@@ -4,7 +4,10 @@ import { useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { Clock3 } from 'lucide-react';
 
 import { AssistantPanel } from '@/components/features/operations-workspace/assistant-panel';
-import { dashboardMockData, sensorsDashboardData } from '@/components/features/operations-workspace/dashboard-mock-data';
+import {
+  dashboardMockData,
+  sensorsDashboardData,
+} from '@/components/features/operations-workspace/dashboard-mock-data';
 import { ParcelMapCard } from '@/components/features/operations-workspace/parcel-map-card';
 import { SensorsWorkspaceSection } from '@/components/features/operations-workspace/sensors-workspace-section';
 import { WeatherWorkspaceSection } from '@/components/features/operations-workspace/weather-workspace-section';
@@ -79,6 +82,10 @@ export function OperationsWorkspace({ route }: OperationsWorkspaceProps) {
     ) ?? data.parcels.features[0];
   const selectedParcel = selectedParcelFeature.properties;
   const isAffectedParcel = selectedParcel.id === data.finding.parcelId;
+  const selectedParcelSensorCount =
+    sensorsDashboardData.parcels.find(
+      ({ parcelId }) => parcelId === selectedParcel.id,
+    )?.sensors.length ?? 0;
 
   function selectParcel(parcelId: string) {
     const repository = createBrowserDemoStateRepository();
@@ -164,6 +171,7 @@ export function OperationsWorkspace({ route }: OperationsWorkspaceProps) {
                 onSelectParcel={selectParcel}
                 parcels={data.parcels}
                 selectedParcel={selectedParcel}
+                sensorCount={selectedParcelSensorCount}
               />
             )}
           </div>

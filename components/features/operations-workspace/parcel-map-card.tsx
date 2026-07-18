@@ -19,6 +19,7 @@ type ParcelMapCardProps = {
   onSelectParcel: (parcelId: string) => void;
   parcels: ParcelCollection;
   selectedParcel: ParcelProperties;
+  sensorCount: number;
 };
 
 export function ParcelMapCard({
@@ -30,6 +31,7 @@ export function ParcelMapCard({
   onSelectParcel,
   parcels,
   selectedParcel,
+  sensorCount,
 }: ParcelMapCardProps) {
   return (
     <div
@@ -60,6 +62,7 @@ export function ParcelMapCard({
           finding={finding}
           onClose={onCloseDetails}
           parcel={selectedParcel}
+          sensorCount={sensorCount}
         />
       ) : null}
     </div>
