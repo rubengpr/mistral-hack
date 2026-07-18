@@ -19,7 +19,7 @@ export type MistralChatMessage = {
   id: string;
   role: MistralChatRole;
   content: string;
-  photo?: MistralChatPhoto;
+  photos?: MistralChatPhoto[];
   actions?: AgentActionEvent[];
 };
 
@@ -33,10 +33,10 @@ export type MistralChatResponse = {
   data: {
     message: string;
     actions: AgentActionEvent[];
-    photoAnalysis?: {
+    photoAnalyses?: {
       photoId: string;
       analysis: FieldPhotoAnalysis;
-    };
+    }[];
   };
 };
 
