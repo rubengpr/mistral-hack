@@ -1,6 +1,6 @@
 'use client';
 
-import { CloudSun, Map, RotateCcw, type LucideIcon } from 'lucide-react';
+import { CloudSun, Map, RotateCcw, Thermometer, type LucideIcon } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -33,6 +33,7 @@ type NavigationItem = {
 const NAVIGATION_ITEMS: NavigationItem[] = [
   { id: 'map', href: '/map', label: 'Map', icon: Map },
   { id: 'weather', href: '/weather', label: 'Weather', icon: CloudSun },
+  { id: 'sensors', href: '/sensors', label: 'Sensors', icon: Thermometer },
 ];
 
 type WorkspaceSidebarProps = {

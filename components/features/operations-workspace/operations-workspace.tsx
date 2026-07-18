@@ -1,14 +1,16 @@
 'use client';
 
 import { useState, useSyncExternalStore, type CSSProperties } from 'react';
-import { Bot, Clock3 } from 'lucide-react';
+import { Clock3 } from 'lucide-react';
 
 import { AssistantPanel } from '@/components/features/operations-workspace/assistant-panel';
-import { dashboardMockData } from '@/components/features/operations-workspace/dashboard-mock-data';
+import { dashboardMockData, sensorsDashboardData } from '@/components/features/operations-workspace/dashboard-mock-data';
 import { ParcelMapCard } from '@/components/features/operations-workspace/parcel-map-card';
+import { SensorsWorkspaceSection } from '@/components/features/operations-workspace/sensors-workspace-section';
 import { WeatherWorkspaceSection } from '@/components/features/operations-workspace/weather-workspace-section';
 import { WorkspaceSidebar } from '@/components/features/operations-workspace/workspace-sidebar';
 import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   SidebarInset,
   SidebarProvider,
@@ -18,6 +20,7 @@ import {
   createBrowserDemoStateRepository,
   DEMO_STATE_STORAGE_KEY,
 } from '@/lib/db/local-storage-demo-state-repository';
+import { ASSISTANT_IDENTITY } from '@/lib/assistant-identity';
 import { cn } from '@/lib/utils';
 import type { WorkspaceRoute } from '@/types/operations-dashboard';
 
@@ -111,11 +114,16 @@ export function OperationsWorkspace({ route }: OperationsWorkspaceProps) {
             size="sm"
             variant={isAssistantOpen ? 'secondary' : 'default'}
           >
-            <Bot data-icon="inline-start" />
+            <Avatar className="size-5">
+              <AvatarImage alt="" src={ASSISTANT_IDENTITY.avatarSrc} />
+              <AvatarFallback>V</AvatarFallback>
+            </Avatar>
             <span className="hidden sm:inline">
-              {isAssistantOpen ? 'Close assistant' : 'Open assistant'}
+              {isAssistantOpen
+                ? `Close ${ASSISTANT_IDENTITY.name}`
+                : `Open ${ASSISTANT_IDENTITY.name}`}
             </span>
-            <span className="sm:hidden">Assistant</span>
+            <span className="sm:hidden">{ASSISTANT_IDENTITY.name}</span>
           </Button>
         </header>
 
@@ -131,7 +139,7 @@ export function OperationsWorkspace({ route }: OperationsWorkspaceProps) {
           <div
             className={cn(
               'min-h-0 min-w-0',
-              route === 'weather' && 'overflow-y-auto',
+              (route === 'map' || route === 'weather') && 'overflow-y-auto',
             )}
           >
             {route === 'weather' ? (
@@ -139,11 +147,13 @@ export function OperationsWorkspace({ route }: OperationsWorkspaceProps) {
                 key={selectedParcelFeature.properties.id}
                 parcel={selectedParcelFeature}
               />
+            ) : route === 'sensors' ? (
+              <SensorsWorkspaceSection data={sensorsDashboardData} />
             ) : (
               <ParcelMapCard
                 affectedSector={data.affectedSector}
                 expanded
-                isAffectedParcel={isAffectedParcel}
+                finding={isAffectedParcel ? data.finding : undefined}
                 onSelectParcel={selectParcel}
                 parcels={data.parcels}
                 selectedParcel={selectedParcel}
