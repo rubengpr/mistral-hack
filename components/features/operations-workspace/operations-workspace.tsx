@@ -19,7 +19,7 @@ import {
   DEMO_STATE_STORAGE_KEY,
 } from '@/lib/db/local-storage-demo-state-repository';
 import { cn } from '@/lib/utils';
-import type { DashboardSection } from '@/types/operations-dashboard';
+import type { WorkspaceRoute } from '@/types/operations-dashboard';
 
 const SIDEBAR_STYLE = {
   '--sidebar-width': '14rem',
@@ -50,15 +50,17 @@ function getServerSelectedParcelId() {
   return dashboardMockData.initialParcelId;
 }
 
-export function OperationsWorkspace() {
+type OperationsWorkspaceProps = {
+  route: WorkspaceRoute;
+};
+
+export function OperationsWorkspace({ route }: OperationsWorkspaceProps) {
   const data = dashboardMockData;
   const storedSelectedParcelId = useSyncExternalStore(
     subscribeToSelectedParcel,
     getStoredSelectedParcelId,
     getServerSelectedParcelId,
   );
-  const [activeSection, setActiveSection] =
-    useState<DashboardSection>('parcels');
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
 
   const selectedParcelId = data.parcels.features.some(
@@ -74,10 +76,6 @@ export function OperationsWorkspace() {
   const selectedParcel = selectedParcelFeature.properties;
   const isAffectedParcel = selectedParcel.id === data.finding.parcelId;
 
-  function navigateTo(section: DashboardSection) {
-    setActiveSection(section);
-  }
-
   function selectParcel(parcelId: string) {
     const repository = createBrowserDemoStateRepository();
     const state = repository.load();
@@ -88,8 +86,7 @@ export function OperationsWorkspace() {
   return (
     <SidebarProvider style={SIDEBAR_STYLE}>
       <WorkspaceSidebar
-        activeSection={activeSection}
-        onNavigate={navigateTo}
+        activeRoute={route}
         parcelCount={data.parcels.features.length}
         portfolioName={data.portfolioName}
       />
@@ -123,7 +120,7 @@ export function OperationsWorkspace() {
         </header>
 
         <div
-          id={activeSection}
+          id={route}
           className={cn(
             'grid min-h-0 flex-1 gap-2 p-2 md:gap-4 md:p-4',
             isAssistantOpen
@@ -134,10 +131,10 @@ export function OperationsWorkspace() {
           <div
             className={cn(
               'min-h-0 min-w-0',
-              activeSection === 'weather' && 'overflow-y-auto',
+              route === 'weather' && 'overflow-y-auto',
             )}
           >
-            {activeSection === 'weather' ? (
+            {route === 'weather' ? (
               <WeatherWorkspaceSection
                 key={selectedParcelFeature.properties.id}
                 parcel={selectedParcelFeature}

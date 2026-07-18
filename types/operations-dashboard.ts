@@ -69,5 +69,4 @@ export type DashboardViewModel = {
   inspection: InspectionSummary;
 };
 
-export type DashboardSection =
-  'findings' | 'parcels' | 'weather' | 'inspection';
+export type WorkspaceRoute = 'map' | 'weather';

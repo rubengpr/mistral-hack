@@ -2,6 +2,7 @@
 
 import { CloudSun, Map, RotateCcw, type LucideIcon } from 'lucide-react';
 import Image from 'next/image';
+import Link from 'next/link';
 
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -19,39 +20,33 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { createBrowserDemoStateRepository } from '@/lib/db/local-storage-demo-state-repository';
-import type { DashboardSection } from '@/types/operations-dashboard';
+import type { WorkspaceRoute } from '@/types/operations-dashboard';
 
 type NavigationItem = {
-  id: DashboardSection;
+  id: WorkspaceRoute;
+  href: `/${WorkspaceRoute}`;
   label: string;
   icon: LucideIcon;
   badge?: string;
 };
 
 const NAVIGATION_ITEMS: NavigationItem[] = [
-  { id: 'parcels', label: 'Map', icon: Map },
-  { id: 'weather', label: 'Weather', icon: CloudSun },
+  { id: 'map', href: '/map', label: 'Map', icon: Map },
+  { id: 'weather', href: '/weather', label: 'Weather', icon: CloudSun },
 ];
 
 type WorkspaceSidebarProps = {
-  activeSection: DashboardSection;
-  onNavigate: (section: DashboardSection) => void;
+  activeRoute: WorkspaceRoute;
   parcelCount: number;
   portfolioName: string;
 };
 
 export function WorkspaceSidebar({
-  activeSection,
-  onNavigate,
+  activeRoute,
   parcelCount,
   portfolioName,
 }: WorkspaceSidebarProps) {
   const { setOpenMobile } = useSidebar();
-
-  function handleNavigate(section: DashboardSection) {
-    onNavigate(section);
-    setOpenMobile(false);
-  }
 
   function resetDemo() {
     createBrowserDemoStateRepository().reset();
@@ -85,17 +80,19 @@ export function WorkspaceSidebar({
               {NAVIGATION_ITEMS.map((item) => (
                 <SidebarMenuItem key={item.id}>
                   <SidebarMenuButton
-                    isActive={activeSection === item.id}
-                    onClick={() => handleNavigate(item.id)}
+                    asChild
+                    isActive={activeRoute === item.id}
                     tooltip={item.label}
                   >
-                    <item.icon aria-hidden="true" />
-                    <span>{item.label}</span>
-                    {item.badge || item.id === 'parcels' ? (
-                      <Badge className="ml-auto" variant="secondary">
-                        {item.id === 'parcels' ? parcelCount : item.badge}
-                      </Badge>
-                    ) : null}
+                    <Link href={item.href} onClick={() => setOpenMobile(false)}>
+                      <item.icon aria-hidden="true" />
+                      <span>{item.label}</span>
+                      {item.badge || item.id === 'map' ? (
+                        <Badge className="ml-auto" variant="secondary">
+                          {item.id === 'map' ? parcelCount : item.badge}
+                        </Badge>
+                      ) : null}
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}

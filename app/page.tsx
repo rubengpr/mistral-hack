@@ -1,5 +1,5 @@
-import { OperationsWorkspace } from '@/components/features/operations-workspace/operations-workspace';
+import { redirect } from 'next/navigation';
 
 export default function Home() {
-  return <OperationsWorkspace />;
+  redirect('/map');
 }
