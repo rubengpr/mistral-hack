@@ -1,14 +1,19 @@
-# Mistral Agricultural Assistant
+# Vinea Agricultural Operations Assistant
 
-A minimal voice chat built with Next.js, shadcn/ui, the Mistral Conversations
-API, Voxtral realtime transcription, and Voxtral text-to-speech.
+A responsive vineyard operations workspace with a continuous, turn-based voice
+conversation powered by Mistral. One button starts voice mode: Vinea listens,
+detects the end of the technician's turn, answers aloud, and resumes listening
+until the technician says “basta” or stops the session.
 
-Selecting the microphone starts conversation mode. It detects one second of
-silence, sends the completed voice turn, speaks the answer, and starts listening
-again. The conversation-mode switch can end the continuous session.
+The current voice implementation combines:
 
-The current session is kept only in browser memory. Requests use `store: false`,
-so the application does not provide persistent conversation history.
+- Voxtral Mini Transcribe for reliable server-side Spanish transcription.
+- A Mistral chat model for contextual multi-turn responses.
+- Voxtral TTS with streamed PCM playback.
+
+Voice mode is intentionally semi-duplex for demo reliability: microphone audio
+is not sent while Vinea is speaking. Text remains available as a fallback. Tool
+execution and parcel-specific agent context are the next implementation layer.
 
 ## Setup
 
@@ -21,18 +26,18 @@ Add your Mistral API key to `.env.local`:
 
 ```text
 MISTRAL_API_KEY=your-api-key
-MISTRAL_MODEL=mistral-small-latest
-MISTRAL_TRANSCRIPTION_MODEL=voxtral-mini-latest
-MISTRAL_REALTIME_TRANSCRIPTION_MODEL=voxtral-mini-transcribe-realtime-2602
+MISTRAL_MODEL=mistral-medium-3-5
+MISTRAL_TRANSCRIPTION_MODEL=voxtral-mini-2602
+MISTRAL_TRANSCRIPTION_LANGUAGE=es
 MISTRAL_SPEECH_MODEL=voxtral-mini-tts-2603
 MISTRAL_VOICE_ID=c69964a6-ab8b-4f8a-9465-ec0925096ec8
 ```
 
-The default voice is the Mistral preset `Paul - Neutral`. Replace
-`MISTRAL_VOICE_ID` to use another preset or custom voice.
+The configured fallback voice is the Mistral preset `Paul - Neutral`. Replace
+`MISTRAL_VOICE_ID` to use another preset or a consented custom voice.
 
-The browser receives only a short-lived, model-scoped realtime token. The
-long-lived Mistral API key remains on the server.
+Recorded turns, chat, and speech synthesis all pass through server routes. The
+long-lived Mistral API key never reaches the browser.
 
 Then start the app:
 
