@@ -127,6 +127,13 @@ export function getSelectedParcelContext(
         ? {
             status: matchingInspection.status,
             notes: matchingInspection.notes,
+            photos: matchingInspection.photos.map(
+              ({ id, capturedAt, analysis }) => ({
+                id,
+                capturedAt,
+                analysis,
+              }),
+            ),
             actions: matchingInspection.actions,
             nextStep: matchingInspection.nextStep,
           }
