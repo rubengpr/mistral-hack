@@ -9,12 +9,29 @@ import type { DemoState } from '@/types/agricultural-operations';
 
 export const DEMO_STATE_STORAGE_KEY =
   'mistral-hack:agricultural-operations:demo-state';
+export const DEMO_STATE_CHANGE_EVENT = 'demo-state-change';
+
+function notifyBrowserStateChange() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(DEMO_STATE_CHANGE_EVENT));
+  }
+}
 
 const analysisSchema = z.object({
   observation: z.string(),
   inference: z.string(),
   uncertainty: z.string(),
   recommendedVerification: z.string(),
+});
+
+const inspectionNoteSchema = z.object({
+  id: z.string(),
+  content: z.string(),
+  createdAt: z.string(),
+  observation: z.string().optional(),
+  assessment: z.string().optional(),
+  uncertainty: z.string().optional(),
+  nextStep: z.string().optional(),
 });
 
 const inspectionSchema = z.object({
@@ -30,18 +47,10 @@ const inspectionSchema = z.object({
       role: z.enum(['technician', 'assistant']),
       content: z.string(),
       createdAt: z.string(),
+      photoIds: z.array(z.string()).optional(),
     }),
   ),
-  notes: z.array(
-    z.object({
-      id: z.string(),
-      content: z.string(),
-      createdAt: z.string(),
-      observation: z.string().optional(),
-      assessment: z.string().optional(),
-      uncertainty: z.string().optional(),
-    }),
-  ),
+  notes: z.array(inspectionNoteSchema),
   photos: z.array(
     z.object({
       id: z.string(),
@@ -65,6 +74,7 @@ const demoStateSchema: z.ZodType<DemoState> = z.object({
   selectedParcelId: z.string(),
   activeFindingId: z.string(),
   activeInspection: inspectionSchema,
+  parcelNotes: z.record(z.string(), z.array(inspectionNoteSchema)).default({}),
   report: z
     .object({
       reportId: z.string(),
@@ -112,6 +122,7 @@ export class LocalStorageDemoStateRepository implements DemoStateRepository {
     const savedState = structuredClone(validatedState);
 
     this.storage.setItem(DEMO_STATE_STORAGE_KEY, JSON.stringify(savedState));
+    notifyBrowserStateChange();
 
     return structuredClone(savedState);
   }
@@ -123,6 +134,7 @@ export class LocalStorageDemoStateRepository implements DemoStateRepository {
       DEMO_STATE_STORAGE_KEY,
       JSON.stringify(canonicalState),
     );
+    notifyBrowserStateChange();
 
     return structuredClone(canonicalState);
   }

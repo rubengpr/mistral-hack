@@ -15,14 +15,22 @@ type PersistedTurn = {
     id: string;
     content: string;
     createdAt: string;
+    photoIds?: string[];
   };
 };
 
 type ApplyInspectionTurnInput = {
   noteDraft?: InspectionNoteDraft;
-  photo?: FieldPhoto;
+  photos?: FieldPhoto[];
   selectedParcelId: string;
   turn: PersistedTurn;
+};
+
+type ApplyParcelNoteInput = {
+  createdAt: string;
+  noteDraft: InspectionNoteDraft;
+  targetParcelIds: string[];
+  turnId: string;
 };
 
 export class InspectionStateMismatchError extends Error {
@@ -45,6 +53,33 @@ function noteContent(draft: InspectionNoteDraft) {
   return [draft.observation, draft.assessment, draft.uncertainty].join(' ');
 }
 
+export function applyParcelNote(
+  state: DemoState,
+  input: ApplyParcelNoteInput,
+): DemoState {
+  const parcelNotes = { ...state.parcelNotes };
+
+  for (const parcelId of new Set(input.targetParcelIds)) {
+    const note = {
+      id: `note-${input.turnId}`,
+      content: noteContent(input.noteDraft),
+      createdAt: input.createdAt,
+      observation: input.noteDraft.observation,
+      assessment: input.noteDraft.assessment,
+      uncertainty: input.noteDraft.uncertainty,
+      nextStep: input.noteDraft.nextStep,
+    };
+    const existingNotes = parcelNotes[parcelId] ?? [];
+
+    parcelNotes[parcelId] = [
+      ...existingNotes.filter(({ id }) => id !== note.id),
+      note,
+    ].slice(-20);
+  }
+
+  return { ...state, parcelNotes };
+}
+
 export function applySuccessfulInspectionTurn(
   state: DemoState,
   input: ApplyInspectionTurnInput,
@@ -54,11 +89,16 @@ export function applySuccessfulInspectionTurn(
   }
 
   const { assistant, technician } = input.turn;
+  const photos = input.photos ?? [];
+  const photoIds = new Set(photos.map(({ id }) => id));
   let conversation = appendUniqueConversationTurn(state.activeInspection, {
     id: technician.id,
     role: 'technician',
     content: technician.content,
     createdAt: technician.createdAt,
+    photoIds:
+      technician.photoIds ??
+      (photos.length > 0 ? photos.map(({ id }) => id) : undefined),
   });
   conversation = appendUniqueConversationTurn(
     { ...state.activeInspection, conversation },
@@ -79,6 +119,7 @@ export function applySuccessfulInspectionTurn(
         observation: input.noteDraft.observation,
         assessment: input.noteDraft.assessment,
         uncertainty: input.noteDraft.uncertainty,
+        nextStep: input.noteDraft.nextStep,
       }
     : undefined;
   const action = input.noteDraft?.completedAction
@@ -88,8 +129,6 @@ export function applySuccessfulInspectionTurn(
         completedAt: assistant.createdAt,
       }
     : undefined;
-  const photo = input.photo;
-
   return {
     ...state,
     activeInspection: {
@@ -106,12 +145,15 @@ export function applySuccessfulInspectionTurn(
             note,
           ].slice(-20)
         : state.activeInspection.notes,
-      photos: photo
-        ? [
-            ...state.activeInspection.photos.filter(({ id }) => id !== photo.id),
-            photo,
-          ].slice(-10)
-        : state.activeInspection.photos,
+      photos:
+        photos.length > 0
+          ? [
+              ...state.activeInspection.photos.filter(
+                ({ id }) => !photoIds.has(id),
+              ),
+              ...photos,
+            ].slice(-10)
+          : state.activeInspection.photos,
       actions: action
         ? [
             ...state.activeInspection.actions.filter(

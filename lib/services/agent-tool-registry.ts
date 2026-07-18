@@ -1,20 +1,41 @@
 import type { Tool } from '@mistralai/mistralai/models/components';
 import { z } from 'zod';
 
+import { getCanonicalDemoScenario } from '@/lib/fixtures/canonical-demo-scenario';
 import { getSelectedParcelContext } from '@/lib/services/parcel-context-service';
 import { generateInspectionReport } from '@/lib/services/inspection-report-service';
+import { getWeatherForecast } from '@/lib/services/weather-forecast-service';
 import {
   GENERATE_INSPECTION_REPORT_TOOL,
+  GET_WEATHER_FORECAST_TOOL,
   GET_SELECTED_PARCEL_CONTEXT_TOOL,
   SAVE_INSPECTION_NOTE_TOOL,
   type AgentActionEvent,
   type AgentToolContext,
-  type InspectionNoteDraft,
 } from '@/types/agent-tools';
+import type { ParcelCluster } from '@/types/agricultural-operations';
 
 const noArgumentsSchema = z.object({}).strict();
-const inspectionNoteDraftSchema = z
+const weatherForecastArgumentsSchema = z
   .object({
+    scope: z.enum(['parcel', 'cluster']),
+    parcelId: z.string().trim().min(1).max(100).optional(),
+    cluster: z
+      .enum(['herault', 'aude', 'gard', 'pyrenees-orientales'])
+      .optional(),
+  })
+  .strict()
+  .refine(
+    ({ scope, parcelId, cluster }) =>
+      scope === 'parcel' ? !cluster : Boolean(cluster) && !parcelId,
+    'Use a parcel or a cluster, not both.',
+  );
+const inspectionNoteArgumentsSchema = z
+  .object({
+    scope: z.enum(['parcel', 'cluster']),
+    cluster: z
+      .enum(['herault', 'aude', 'gard', 'pyrenees-orientales'])
+      .optional(),
     observation: z.string().trim().min(1).max(1_000),
     assessment: z.string().trim().min(1).max(1_000),
     uncertainty: z.string().trim().min(1).max(1_000),
@@ -27,21 +48,58 @@ const inspectionNoteDraftSchema = z
     ),
     nextStep: z.string().trim().min(1).max(1_000),
   })
-  .strict();
+  .strict()
+  .refine(
+    ({ scope, cluster }) => scope === 'cluster' || cluster === undefined,
+    'A cluster can only be supplied for cluster notes.',
+  );
 
 export const AGENT_TOOL_DEFINITIONS: Array<Tool & { type: 'function' }> = [
   {
     type: 'function',
     function: {
-      name: SAVE_INSPECTION_NOTE_TOOL,
+      name: GET_WEATHER_FORECAST_TOOL,
       description:
-        'Prepare a structured field inspection note only when the technician explicitly asks to record, save, or note their field findings. Preserve the technician\'s observation and assessment. Put only actions the technician says are already completed in completedAction; put planned or recommended work in nextStep. Never turn uncertainty about disease into a diagnosis. This tool prepares the note for browser persistence and must not be used in the same turn as report generation.',
+        'Retrieve verified recent weather and the next 7-day forecast for the selected parcel or one portfolio cluster. Use this for forecast, rainfall outlook, temperature, evapotranspiration, or regional irrigation-planning questions. This tool reports evidence and never changes irrigation.',
       strict: true,
       parameters: {
         type: 'object',
         additionalProperties: false,
-        required: ['observation', 'assessment', 'uncertainty', 'nextStep'],
+        required: ['scope'],
         properties: {
+          scope: { type: 'string', enum: ['parcel', 'cluster'] },
+          parcelId: { type: 'string' },
+          cluster: {
+            type: 'string',
+            enum: ['herault', 'aude', 'gard', 'pyrenees-orientales'],
+          },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: SAVE_INSPECTION_NOTE_TOOL,
+      description:
+        "Prepare a structured operational note only when the technician explicitly asks to record, save, or note information. Use parcel scope for the selected parcel. Use cluster scope when the technician says all reviewed parcels, all these parcels, or names a regional cluster. Preserve the technician's meaning. Put only actions they say are already completed in completedAction; put planned or recommended work in nextStep. Never turn uncertainty about disease into a diagnosis. This tool prepares the note for browser persistence and must not be used in the same turn as report generation.",
+      strict: true,
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        required: [
+          'scope',
+          'observation',
+          'assessment',
+          'uncertainty',
+          'nextStep',
+        ],
+        properties: {
+          scope: { type: 'string', enum: ['parcel', 'cluster'] },
+          cluster: {
+            type: 'string',
+            enum: ['herault', 'aude', 'gard', 'pyrenees-orientales'],
+          },
           observation: { type: 'string' },
           assessment: { type: 'string' },
           uncertainty: { type: 'string' },
@@ -89,10 +147,10 @@ function parseToolArguments(value: unknown) {
   return noArgumentsSchema.parse(value ?? {});
 }
 
-function parseInspectionNoteDraft(value: unknown): InspectionNoteDraft {
+function parseInspectionNoteArguments(value: unknown) {
   const parsedValue = typeof value === 'string' ? JSON.parse(value) : value;
 
-  return inspectionNoteDraftSchema.parse(parsedValue);
+  return inspectionNoteArgumentsSchema.parse(parsedValue);
 }
 
 export async function executeAgentTool(
@@ -102,6 +160,7 @@ export async function executeAgentTool(
 ): Promise<{ content: string; action?: AgentActionEvent }> {
   if (
     name !== GET_SELECTED_PARCEL_CONTEXT_TOOL &&
+    name !== GET_WEATHER_FORECAST_TOOL &&
     name !== SAVE_INSPECTION_NOTE_TOOL &&
     name !== GENERATE_INSPECTION_REPORT_TOOL
   ) {
@@ -114,17 +173,54 @@ export async function executeAgentTool(
   }
 
   try {
-    if (name === SAVE_INSPECTION_NOTE_TOOL) {
-      if (
-        !context.inspectionHistory ||
-        context.inspectionHistory.parcelId !== context.selectedParcelId
-      ) {
-        throw new Error(
-          'A matching active inspection is required to prepare a field note.',
-        );
-      }
+    if (name === GET_WEATHER_FORECAST_TOOL) {
+      const parsedValue =
+        typeof rawArguments === 'string'
+          ? JSON.parse(rawArguments || '{}')
+          : rawArguments;
+      const arguments_ = weatherForecastArgumentsSchema.parse(parsedValue);
+      const forecast = await getWeatherForecast(
+        arguments_.scope === 'cluster'
+          ? {
+              scope: 'cluster',
+              cluster: arguments_.cluster as ParcelCluster,
+            }
+          : {
+              scope: 'parcel',
+              parcelId: arguments_.parcelId ?? context.selectedParcelId,
+            },
+      );
 
-      const draft = parseInspectionNoteDraft(rawArguments);
+      return {
+        content: JSON.stringify({ success: true, data: forecast }),
+        action: {
+          name: GET_WEATHER_FORECAST_TOOL,
+          label: `Forecast retrieved · ${forecast.locationLabel}`,
+          status: 'completed',
+        },
+      };
+    }
+
+    if (name === SAVE_INSPECTION_NOTE_TOOL) {
+      const { scope, cluster, ...draft } =
+        parseInspectionNoteArguments(rawArguments);
+      const scenario = getCanonicalDemoScenario();
+      const selectedParcel = scenario.parcels.features.find(
+        ({ properties }) => properties.id === context.selectedParcelId,
+      );
+      const targetCluster = cluster ?? selectedParcel?.properties.cluster;
+      const targetParcelIds =
+        scope === 'cluster' && targetCluster
+          ? scenario.parcels.features
+              .filter(({ properties }) => properties.cluster === targetCluster)
+              .map(({ properties }) => properties.id)
+          : scope === 'parcel'
+            ? [context.selectedParcelId]
+            : [];
+
+      if (targetParcelIds.length === 0) {
+        throw new Error('The note target does not contain any parcels.');
+      }
 
       return {
         content: JSON.stringify({
@@ -133,13 +229,18 @@ export async function executeAgentTool(
             status: 'ready-for-browser-persistence',
             observation: draft.observation,
             nextStep: draft.nextStep,
+            targetParcelIds,
           },
         }),
         action: {
           draft,
-          label: 'Inspection note ready',
+          label:
+            targetParcelIds.length === 1
+              ? 'Parcel note ready'
+              : `Parcel note ready · ${targetParcelIds.length} parcels`,
           name: SAVE_INSPECTION_NOTE_TOOL,
           status: 'completed',
+          targetParcelIds,
         },
       };
     }
@@ -168,9 +269,10 @@ export async function executeAgentTool(
       };
     }
 
-    const parcelContext = getSelectedParcelContext(
+    const parcelContext = await getSelectedParcelContext(
       context.selectedParcelId,
       context.inspectionHistory,
+      context.selectedParcelNotes,
     );
 
     return {
@@ -190,9 +292,11 @@ export async function executeAgentTool(
         error:
           name === GENERATE_INSPECTION_REPORT_TOOL
             ? 'The inspection report could not be generated.'
-            : name === SAVE_INSPECTION_NOTE_TOOL
-              ? 'The inspection note could not be prepared.'
-            : 'The selected parcel context could not be retrieved.',
+            : name === GET_WEATHER_FORECAST_TOOL
+              ? 'The weather forecast could not be retrieved.'
+              : name === SAVE_INSPECTION_NOTE_TOOL
+                ? 'The inspection note could not be prepared.'
+                : 'The selected parcel context could not be retrieved.',
       }),
     };
   }

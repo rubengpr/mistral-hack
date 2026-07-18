@@ -56,7 +56,29 @@ const chatRequestSchema = z.object({
     .min(1)
     .max(40),
   selectedParcelId: z.string().trim().min(1).max(100),
-  photo: fieldPhotoSchema.optional(),
+  selectedParcelNotes: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1).max(100),
+        content: z.string().trim().min(1).max(2_000),
+        createdAt: z.iso.datetime(),
+        observation: z.string().trim().min(1).max(1_000).optional(),
+        assessment: z.string().trim().min(1).max(1_000).optional(),
+        uncertainty: z.string().trim().min(1).max(1_000).optional(),
+        nextStep: z.string().trim().min(1).max(1_000).optional(),
+      }),
+    )
+    .max(20)
+    .optional(),
+  photos: z
+    .array(fieldPhotoSchema)
+    .min(1)
+    .max(3)
+    .refine(
+      (photos) => new Set(photos.map(({ id }) => id)).size === photos.length,
+      'Each field photo must have a unique ID.',
+    )
+    .optional(),
   inspectionHistory: z
     .object({
       id: z.string().trim().min(1).max(100),
@@ -72,6 +94,10 @@ const chatRequestSchema = z.object({
             role: z.enum(['technician', 'assistant']),
             content: z.string().trim().min(1).max(8_000),
             createdAt: z.iso.datetime(),
+            photoIds: z
+              .array(z.string().trim().min(1).max(100))
+              .max(3)
+              .optional(),
           }),
         )
         .max(40),
@@ -84,6 +110,7 @@ const chatRequestSchema = z.object({
             observation: z.string().trim().min(1).max(1_000).optional(),
             assessment: z.string().trim().min(1).max(1_000).optional(),
             uncertainty: z.string().trim().min(1).max(1_000).optional(),
+            nextStep: z.string().trim().min(1).max(1_000).optional(),
           }),
         )
         .max(20),
@@ -148,7 +175,7 @@ export async function POST(request: Request) {
 
   const lastMessage = parsedRequest.data.messages.at(-1);
 
-  if (!lastMessage?.content && !parsedRequest.data.photo) {
+  if (!lastMessage?.content && !parsedRequest.data.photos) {
     return NextResponse.json(
       { error: 'Enter a message or attach a field photo before sending.' },
       { status: 400 },
@@ -169,9 +196,9 @@ export async function POST(request: Request) {
   try {
     let messages = parsedRequest.data.messages;
     let inspectionHistory = parsedRequest.data.inspectionHistory;
-    let photoAnalysis;
+    let photoAnalyses;
 
-    if (parsedRequest.data.photo) {
+    if (parsedRequest.data.photos) {
       if (
         !inspectionHistory ||
         inspectionHistory.parcelId !== parsedRequest.data.selectedParcelId
@@ -185,21 +212,23 @@ export async function POST(request: Request) {
         );
       }
 
-      const parcelContext = getSelectedParcelContext(
+      const parcelContext = await getSelectedParcelContext(
         parsedRequest.data.selectedParcelId,
         inspectionHistory,
       );
-      const analysis = await analyzeFieldPhoto({
-        photo: parsedRequest.data.photo,
-        technicianMessage: lastMessage?.content ?? '',
-        parcelContext,
-      });
-      const photo = {
-        id: parsedRequest.data.photo.id,
-        capturedAt: parsedRequest.data.photo.capturedAt,
-        dataUrl: parsedRequest.data.photo.dataUrl,
-        analysis,
-      };
+      const analyzedPhotos = await Promise.all(
+        parsedRequest.data.photos.map(async (photo) => ({
+          id: photo.id,
+          capturedAt: photo.capturedAt,
+          dataUrl: photo.dataUrl,
+          analysis: await analyzeFieldPhoto({
+            photo,
+            technicianMessage: lastMessage?.content ?? '',
+            parcelContext,
+          }),
+        })),
+      );
+      const photoIds = new Set(analyzedPhotos.map(({ id }) => id));
 
       inspectionHistory = {
         ...inspectionHistory,
@@ -208,29 +237,33 @@ export async function POST(request: Request) {
             ? ('in-progress' as const)
             : inspectionHistory.status,
         photos: [
-          ...inspectionHistory.photos.filter(({ id }) => id !== photo.id),
-          photo,
+          ...inspectionHistory.photos.filter(({ id }) => !photoIds.has(id)),
+          ...analyzedPhotos,
         ],
       };
       messages = messages.map((message, index) =>
         index === messages.length - 1
           ? {
               ...message,
-              content: `${message.content || 'Analyze this field photo as supporting evidence.'}\n\nSupporting field photo analysis: ${JSON.stringify(analysis)}`,
+              content: `${message.content || 'Analyze these field photos as supporting evidence.'}\n\nSupporting field photo analyses: ${JSON.stringify(analyzedPhotos.map(({ id, analysis }) => ({ photoId: id, analysis })))}`,
             }
           : message,
       );
-      photoAnalysis = { photoId: photo.id, analysis };
+      photoAnalyses = analyzedPhotos.map(({ id, analysis }) => ({
+        photoId: id,
+        analysis,
+      }));
     }
 
     const result = await completeMistralChat(messages, {
       selectedParcelId: parsedRequest.data.selectedParcelId,
       inspectionHistory,
+      selectedParcelNotes: parsedRequest.data.selectedParcelNotes,
     });
 
     return NextResponse.json({
       success: true,
-      data: { ...result, photoAnalysis },
+      data: { ...result, photoAnalyses },
     });
   } catch (error) {
     if (error instanceof MistralConfigurationError) {
