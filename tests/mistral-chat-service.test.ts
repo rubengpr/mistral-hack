@@ -51,6 +51,16 @@ describe('Mistral chat service', () => {
         selectedParcelId: 'parcel-herault-01',
       }),
     ).resolves.toEqual({ message: 'Hola.', actions: [] });
+
+    const request = chatComplete.mock.calls[0]?.[0];
+    const systemMessage = request.messages.find(
+      (message: { role: string }) => message.role === 'system',
+    );
+
+    expect(systemMessage.content).toContain(
+      'Always render numeric values with digits and standard unit symbols',
+    );
+    expect(systemMessage.content).toContain('32%, 33.2%, and 24.5 °C');
   });
 
   it('does not expose internal data provenance in the final answer', async () => {

@@ -37,8 +37,23 @@ describe('inspection report service', () => {
     vi.unstubAllEnvs();
   });
 
+  it('requires a saved field note review before report generation', async () => {
+    const inspection = getCanonicalDemoState().activeInspection;
+
+    await expect(
+      generateInspectionReport({
+        inspectionHistory: inspection,
+        selectedParcelId: inspection.parcelId,
+      }),
+    ).rejects.toThrow(
+      'Save and review the field inspection note before generating its report.',
+    );
+    expect(chatParse).not.toHaveBeenCalled();
+  });
+
   it('generates a signed one-page report artifact from available evidence', async () => {
     const inspection = getCanonicalDemoState().activeInspection;
+    inspection.status = 'ready-for-review';
     const artifact = await generateInspectionReport({
       inspectionHistory: inspection,
       selectedParcelId: inspection.parcelId,
@@ -69,5 +84,38 @@ describe('inspection report service', () => {
     expect(artifact.report.moistureTrend).toHaveLength(5);
     expect(artifact.report.photoDataUrl).toBeUndefined();
     expect(artifact.approvalToken).toContain('.');
+  });
+
+  it('uses the persisted field note and recommended next step', async () => {
+    const inspection = getCanonicalDemoState().activeInspection;
+    inspection.status = 'ready-for-review';
+    inspection.notes.push({
+      id: 'note-01',
+      content:
+        'Mild symptoms are localized in Sector B. The cause is not confirmed.',
+      createdAt: '2026-07-18T12:00:00Z',
+      observation: 'Mild symptoms are localized in Sector B.',
+      assessment: 'The issue appears limited.',
+      uncertainty: 'The cause is not confirmed.',
+    });
+    inspection.nextStep = 'Prune affected shoots and reinspect adjacent rows.';
+
+    const artifact = await generateInspectionReport({
+      inspectionHistory: inspection,
+      selectedParcelId: inspection.parcelId,
+    });
+
+    expect(artifact.report.evidence).toContainEqual(
+      expect.objectContaining({
+        source: 'field-note',
+        statement: expect.stringContaining('localized in Sector B'),
+      }),
+    );
+    expect(artifact.report.action).toBe(
+      'Prune affected shoots and reinspect adjacent rows.',
+    );
+    expect(artifact.report.nextFollowUp).toBe(
+      'Prune affected shoots and reinspect adjacent rows.',
+    );
   });
 });

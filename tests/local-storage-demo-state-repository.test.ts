@@ -36,6 +36,15 @@ describe('LocalStorageDemoStateRepository', () => {
       id: 'note-01',
       content: 'Irrigation delivery requires field verification.',
       createdAt: '2026-07-18T09:30:00Z',
+      observation: 'Mild symptoms are localized in Sector B.',
+      assessment: 'The issue appears limited.',
+      uncertainty: 'The cause is not confirmed.',
+    });
+    state.activeInspection.conversation.push({
+      id: 'turn-01',
+      role: 'technician',
+      content: 'Record the localized symptoms.',
+      createdAt: '2026-07-18T09:29:00Z',
     });
     firstRepository.save(state);
 
@@ -44,7 +53,13 @@ describe('LocalStorageDemoStateRepository', () => {
     expect(secondRepository.load().activeInspection).toEqual(
       expect.objectContaining({
         status: 'in-progress',
-        notes: [expect.objectContaining({ id: 'note-01' })],
+        notes: [
+          expect.objectContaining({
+            id: 'note-01',
+            observation: 'Mild symptoms are localized in Sector B.',
+          }),
+        ],
+        conversation: [expect.objectContaining({ id: 'turn-01' })],
       }),
     );
   });

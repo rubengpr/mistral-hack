@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  AFFECTED_PARCEL_ID,
   getCanonicalDemoScenario,
   getCanonicalDemoState,
+  REVIEW_PARCEL_ID,
 } from '@/lib/fixtures/canonical-demo-scenario';
 
 describe('canonical demo scenario', () => {
@@ -118,6 +120,43 @@ describe('canonical demo scenario', () => {
         .filter(({ observedAt }) => observedAt >= '2026-07-14T08:00:00Z')
         .every(({ value }) => value === 0),
     ).toBe(true);
+  });
+
+  it('exposes exactly one critical parcel and one parcel for review', () => {
+    const scenario = getCanonicalDemoScenario();
+    const statuses = Object.groupBy(
+      scenario.parcels.features,
+      ({ properties }) => properties.moistureStatus,
+    );
+    const reviewParcel = scenario.parcels.features.find(
+      ({ properties }) => properties.id === REVIEW_PARCEL_ID,
+    );
+
+    expect(statuses.stable).toHaveLength(22);
+    expect(statuses.watch).toHaveLength(1);
+    expect(statuses.critical).toHaveLength(1);
+    expect(reviewParcel?.properties.currentSoilMoisturePercent).toBe(24);
+    expect(scenario.reviewSummaries).toEqual([
+      expect.objectContaining({
+        parcelId: AFFECTED_PARCEL_ID,
+        status: 'critical',
+        source: 'mistral-morning-review',
+        quality: 'simulated',
+      }),
+      expect.objectContaining({
+        parcelId: REVIEW_PARCEL_ID,
+        status: 'watch',
+        source: 'mistral-morning-review',
+        quality: 'simulated',
+      }),
+    ]);
+  });
+
+  it('keeps the active inspection attached only to the critical parcel', () => {
+    const state = getCanonicalDemoState();
+
+    expect(state.activeInspection.parcelId).toBe(AFFECTED_PARCEL_ID);
+    expect(state.activeInspection.parcelId).not.toBe(REVIEW_PARCEL_ID);
   });
 
   it('returns defensive copies of fixtures', () => {
