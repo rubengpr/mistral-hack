@@ -1,6 +1,12 @@
 'use client';
 
-import { useState, useSyncExternalStore, type CSSProperties } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+} from 'react';
 import { Clock3 } from 'lucide-react';
 
 import { AssistantPanel } from '@/components/features/operations-workspace/assistant-panel';
@@ -21,17 +27,19 @@ import {
 } from '@/components/ui/sidebar';
 import {
   createBrowserDemoStateRepository,
+  DEMO_STATE_CHANGE_EVENT,
   DEMO_STATE_STORAGE_KEY,
 } from '@/lib/db/local-storage-demo-state-repository';
 import { ASSISTANT_IDENTITY } from '@/lib/assistant-identity';
+import { fetchPortfolioWaterReview } from '@/lib/api/weather-api';
 import { cn } from '@/lib/utils';
 import type { WorkspaceRoute } from '@/types/operations-dashboard';
+import type { InspectionNote } from '@/types/agricultural-operations';
+import type { PortfolioWaterReview } from '@/types/weather';
 
 const SIDEBAR_STYLE = {
   '--sidebar-width': '14rem',
 } as CSSProperties;
-const DEMO_SELECTION_EVENT = 'demo-parcel-selection-change';
-
 function subscribeToSelectedParcel(onStoreChange: () => void) {
   function handleStorage(event: StorageEvent) {
     if (event.key === DEMO_STATE_STORAGE_KEY) {
@@ -40,11 +48,11 @@ function subscribeToSelectedParcel(onStoreChange: () => void) {
   }
 
   window.addEventListener('storage', handleStorage);
-  window.addEventListener(DEMO_SELECTION_EVENT, onStoreChange);
+  window.addEventListener(DEMO_STATE_CHANGE_EVENT, onStoreChange);
 
   return () => {
     window.removeEventListener('storage', handleStorage);
-    window.removeEventListener(DEMO_SELECTION_EVENT, onStoreChange);
+    window.removeEventListener(DEMO_STATE_CHANGE_EVENT, onStoreChange);
   };
 }
 
@@ -54,6 +62,33 @@ function getStoredSelectedParcelId() {
 
 function getServerSelectedParcelId() {
   return dashboardMockData.initialParcelId;
+}
+
+type ParcelNotesSnapshot = {
+  activeInspection: {
+    notes: InspectionNote[];
+    parcelId: string;
+  };
+  parcelNotes: Record<string, InspectionNote[]>;
+};
+
+function getStoredParcelNotesSnapshot() {
+  const state = createBrowserDemoStateRepository().load();
+
+  return JSON.stringify({
+    activeInspection: {
+      notes: state.activeInspection.notes,
+      parcelId: state.activeInspection.parcelId,
+    },
+    parcelNotes: state.parcelNotes,
+  } satisfies ParcelNotesSnapshot);
+}
+
+function getServerParcelNotesSnapshot() {
+  return JSON.stringify({
+    activeInspection: { notes: [], parcelId: '' },
+    parcelNotes: {},
+  } satisfies ParcelNotesSnapshot);
 }
 
 type OperationsWorkspaceProps = {
@@ -67,34 +102,124 @@ export function OperationsWorkspace({ route }: OperationsWorkspaceProps) {
     getStoredSelectedParcelId,
     getServerSelectedParcelId,
   );
+  const parcelNotesSnapshot = useSyncExternalStore(
+    subscribeToSelectedParcel,
+    getStoredParcelNotesSnapshot,
+    getServerParcelNotesSnapshot,
+  );
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [isParcelDetailsOpen, setIsParcelDetailsOpen] = useState(false);
+  const [waterReview, setWaterReview] = useState<PortfolioWaterReview>();
 
-  const selectedParcelId = data.parcels.features.some(
+  useEffect(() => {
+    const controller = new AbortController();
+
+    void fetchPortfolioWaterReview(controller.signal)
+      .then(setWaterReview)
+      .catch(() => {
+        // The canonical Gard review remains visible when live weather fails.
+      });
+
+    return () => controller.abort();
+  }, []);
+
+  const parcels = useMemo(() => {
+    if (!waterReview) {
+      return data.parcels;
+    }
+
+    return {
+      ...data.parcels,
+      features: data.parcels.features.map((parcel) => ({
+        ...parcel,
+        properties: {
+          ...parcel.properties,
+          operationalStatus:
+            parcel.properties.moistureStatus === 'critical'
+              ? ('critical' as const)
+              : parcel.properties.cluster === waterReview.selectedCluster
+                ? ('review' as const)
+                : ('normal' as const),
+        },
+      })),
+    };
+  }, [data.parcels, waterReview]);
+
+  const reviewSummaries = useMemo(() => {
+    if (!waterReview) {
+      return data.reviewSummaries;
+    }
+
+    const criticalSummaries = data.reviewSummaries.filter(
+      ({ status }) => status === 'critical',
+    );
+    const assessment = waterReview.assessments.find(
+      ({ cluster }) => cluster === waterReview.selectedCluster,
+    );
+
+    if (!assessment) {
+      return criticalSummaries;
+    }
+
+    const regionalSummaries = parcels.features
+      .filter(({ properties }) => properties.cluster === assessment.cluster)
+      .map(({ properties }) => ({
+        parcelId: properties.id,
+        status: 'review' as const,
+        title: 'Irrigation plan review recommended',
+        summary:
+          'The seven-day outlook indicates that forecast rainfall and scheduled irrigation may not cover atmospheric water demand. Recalculate irrigation depth, volume, or duration for this parcel.',
+        generatedAt: waterReview.generatedAt,
+        source: 'mistral-morning-review' as const,
+        quality: assessment.quality,
+        evidence: {
+          recentPrecipitationMillimeters:
+            assessment.recentPrecipitationMillimeters,
+          forecastPrecipitationMillimeters:
+            assessment.forecastPrecipitationMillimeters,
+          forecastEvapotranspirationMillimeters:
+            assessment.forecastEvapotranspirationMillimeters,
+          scheduledIrrigationMillimeters:
+            assessment.scheduledIrrigationMillimeters,
+          forecastGapMillimeters: assessment.forecastGapMillimeters,
+          forecastStartsOn: assessment.forecastStartsOn,
+          forecastEndsOn: assessment.forecastEndsOn,
+        },
+      }));
+
+    return [...criticalSummaries, ...regionalSummaries];
+  }, [data.reviewSummaries, parcels.features, waterReview]);
+
+  const selectedParcelId = parcels.features.some(
     ({ properties }) => properties.id === storedSelectedParcelId,
   )
     ? storedSelectedParcelId
     : data.initialParcelId;
 
   const selectedParcelFeature =
-    data.parcels.features.find(
+    parcels.features.find(
       (feature) => feature.properties.id === selectedParcelId,
-    ) ?? data.parcels.features[0];
+    ) ?? parcels.features[0];
   const selectedParcel = selectedParcelFeature.properties;
   const isAffectedParcel = selectedParcel.id === data.finding.parcelId;
-  const selectedReviewSummary = data.reviewSummaries.find(
+  const selectedReviewSummary = reviewSummaries.find(
     ({ parcelId }) => parcelId === selectedParcel.id,
   );
   const selectedParcelSensorCount =
     sensorsDashboardData.parcels.find(
       ({ parcelId }) => parcelId === selectedParcel.id,
     )?.sensors.length ?? 0;
+  const noteState = JSON.parse(parcelNotesSnapshot) as ParcelNotesSnapshot;
+  const selectedParcelNotes =
+    noteState.parcelNotes[selectedParcel.id] ??
+    (noteState.activeInspection.parcelId === selectedParcel.id
+      ? noteState.activeInspection.notes
+      : []);
 
   function selectParcel(parcelId: string) {
     const repository = createBrowserDemoStateRepository();
     const state = repository.load();
     repository.save({ ...state, selectedParcelId: parcelId });
-    window.dispatchEvent(new Event(DEMO_SELECTION_EVENT));
     setIsParcelDetailsOpen(true);
   }
 
@@ -178,7 +303,8 @@ export function OperationsWorkspace({ route }: OperationsWorkspaceProps) {
                 onAskVinea={askVineaAboutParcel}
                 onCloseDetails={() => setIsParcelDetailsOpen(false)}
                 onSelectParcel={selectParcel}
-                parcels={data.parcels}
+                parcels={parcels}
+                parcelNotes={selectedParcelNotes}
                 reviewSummary={selectedReviewSummary}
                 selectedParcel={selectedParcel}
                 sensorCount={selectedParcelSensorCount}

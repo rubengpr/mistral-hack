@@ -72,11 +72,13 @@ const chartConfig = {
 type WeatherSeriesChartCardProps = {
   parcelName: string;
   series: WeatherSeries;
+  title?: string;
 };
 
 export function WeatherSeriesChartCard({
   parcelName,
   series,
+  title = 'Weather history',
 }: WeatherSeriesChartCardProps) {
   const [metric, setMetric] = useState<WeatherMetric>('precipitation');
   const selectedMetric = metricOptions[metric];
@@ -108,7 +110,7 @@ export function WeatherSeriesChartCard({
     <Card>
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-col gap-1.5">
-          <CardTitle>Weather history</CardTitle>
+          <CardTitle>{title}</CardTitle>
           <CardDescription>
             {parcelName} · {series.startsOn}–{series.endsOn}
           </CardDescription>

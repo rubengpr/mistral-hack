@@ -38,7 +38,8 @@ const affectedMoisture = scenario.observations
   .filter(
     (observation) =>
       observation.source === 'soil-moisture-sensor' &&
-      observation.parcelId === finding.parcelId,
+      observation.parcelId === finding.parcelId &&
+      observation.sectorId === finding.sectorId,
   )
   .map(({ observedAt, value }) => ({
     timestamp: observedAt,

@@ -5,6 +5,8 @@ import type { ChatStatus, FileUIPart } from 'ai';
 import {
   AudioLines,
   Camera,
+  ChevronDown,
+  ChevronUp,
   CircleCheck,
   ClipboardCheck,
   FileText,
@@ -54,7 +56,10 @@ import { ReportPreviewDialog } from '@/components/features/operations-workspace/
 import { useVoiceConversation } from '@/hooks/use-voice-conversation';
 import { ASSISTANT_IDENTITY } from '@/lib/assistant-identity';
 import { createBrowserDemoStateRepository } from '@/lib/db/local-storage-demo-state-repository';
-import { applySuccessfulInspectionTurn } from '@/lib/services/inspection-state-service';
+import {
+  applyParcelNote,
+  applySuccessfulInspectionTurn,
+} from '@/lib/services/inspection-state-service';
 import {
   FIELD_PHOTO_INPUT_MAX_BYTES,
   prepareFieldPhoto,
@@ -82,6 +87,8 @@ const VOICE_STATE_LABELS: Record<VoiceConversationState, string> = {
   speaking: 'Speaking',
   error: 'Try voice again',
 };
+
+const MAX_FIELD_PHOTOS_PER_TURN = 3;
 
 type VoiceControlProps = {
   active: boolean;
@@ -128,7 +135,7 @@ type ChatContentProps = {
   isAnalyzingPhoto: boolean;
   messages: MistralChatMessage[];
   onInputError: (message: string) => void;
-  onSend: (text: string, file?: FileUIPart) => Promise<string>;
+  onSend: (text: string, files?: FileUIPart[]) => Promise<string>;
   onOpenReport: (artifact: ReportArtifact) => void;
   onStop: () => void;
   status: ChatStatus;
@@ -142,81 +149,135 @@ type ChatContentProps = {
 };
 
 function InspectionRecordCard({ inspection }: { inspection: Inspection }) {
+  const [isExpanded, setIsExpanded] = useState(true);
   const note = inspection.notes.at(-1);
-  const photo = inspection.photos.at(-1);
+  const photos = inspection.photos;
   const action = inspection.actions.at(-1);
+  const contentId = `inspection-record-${inspection.id}`;
 
-  if (!note && !photo) {
+  if (!note && photos.length === 0) {
     return null;
   }
 
   return (
-    <div className="rounded-lg border bg-muted/35 p-3" role="region" aria-label="Inspection record">
+    <div
+      className="rounded-lg border bg-muted/35 p-3"
+      role="region"
+      aria-label="Inspection record"
+    >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-medium">
           <ClipboardCheck className="size-4" aria-hidden="true" />
           Inspection record
         </div>
-        <Badge variant="secondary">Saved locally</Badge>
-      </div>
-
-      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground sm:hidden">
-        <span>{inspection.conversation.length} conversation turns</span>
-        {photo ? <span>· Photo saved</span> : null}
-      </div>
-
-      <div className="mt-3 hidden gap-3 text-xs sm:grid">
-        {photo ? (
-          <div className="flex gap-3">
-            <Image
-              alt="Saved field evidence"
-              className="size-16 shrink-0 rounded-md object-cover"
-              height={64}
-              src={photo.dataUrl}
-              unoptimized
-              width={64}
-            />
-            <div className="min-w-0">
-              <p className="font-medium">Field evidence</p>
-              <p className="mt-1 line-clamp-3 text-muted-foreground">
-                {photo.analysis?.observation ??
-                  'A technician-provided field photo is attached.'}
-              </p>
-            </div>
-          </div>
-        ) : null}
-
-        {note ? (
-          <div>
-            <p className="font-medium">Latest field note</p>
-            <p className="mt-1 text-muted-foreground">
-              {note.observation ?? note.content}
-            </p>
-            {note.assessment ? (
-              <p className="mt-1 text-muted-foreground">{note.assessment}</p>
-            ) : null}
-            {note.uncertainty ? (
-              <p className="mt-1 text-muted-foreground">
-                Uncertainty: {note.uncertainty}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className="grid grid-cols-2 gap-3 border-t pt-3">
-          <div>
-            <p className="font-medium">Completed action</p>
-            <p className="mt-1 text-muted-foreground">
-              {action?.description ?? 'No completed action recorded.'}
-            </p>
-          </div>
-          <div>
-            <p className="font-medium">Next step</p>
-            <p className="mt-1 text-muted-foreground">
-              {inspection.nextStep}
-            </p>
-          </div>
+        <div className="flex items-center gap-1">
+          <Badge variant="secondary">Saved locally</Badge>
+          <Button
+            aria-controls={contentId}
+            aria-expanded={isExpanded}
+            aria-label={
+              isExpanded
+                ? 'Collapse inspection record'
+                : 'Expand inspection record'
+            }
+            onClick={() => setIsExpanded((expanded) => !expanded)}
+            size="icon"
+            type="button"
+            variant="ghost"
+          >
+            {isExpanded ? (
+              <ChevronUp aria-hidden="true" />
+            ) : (
+              <ChevronDown aria-hidden="true" />
+            )}
+          </Button>
         </div>
+      </div>
+
+      <div id={contentId}>
+        {!isExpanded ? (
+          <p className="mt-1 truncate text-xs text-muted-foreground">
+            {inspection.conversation.length} conversation turns
+            {photos.length > 0
+              ? ` · ${photos.length} ${photos.length === 1 ? 'photo' : 'photos'} saved`
+              : ''}
+          </p>
+        ) : (
+          <>
+            <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground sm:hidden">
+              <span>{inspection.conversation.length} conversation turns</span>
+              {photos.length > 0 ? (
+                <span>
+                  · {photos.length} {photos.length === 1 ? 'photo' : 'photos'}{' '}
+                  saved
+                </span>
+              ) : null}
+            </div>
+
+            <div className="mt-3 hidden gap-3 text-xs sm:grid">
+              {photos.length > 0 ? (
+                <div className="flex gap-3">
+                  <div className="flex shrink-0 gap-1">
+                    {photos
+                      .slice(-MAX_FIELD_PHOTOS_PER_TURN)
+                      .map((photo, index) => (
+                        <Image
+                          alt={`Saved field evidence ${index + 1}`}
+                          className="size-16 rounded-md object-cover"
+                          height={64}
+                          key={photo.id}
+                          src={photo.dataUrl}
+                          unoptimized
+                          width={64}
+                        />
+                      ))}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium">Field evidence</p>
+                    <p className="mt-1 line-clamp-3 text-muted-foreground">
+                      {photos.at(-1)?.analysis?.observation ??
+                        `${photos.length} technician-provided field ${photos.length === 1 ? 'photo is' : 'photos are'} attached.`}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+
+              {note ? (
+                <div>
+                  <p className="font-medium">Latest field note</p>
+                  <p className="mt-1 text-muted-foreground">
+                    {note.observation ?? note.content}
+                  </p>
+                  {note.assessment ? (
+                    <p className="mt-1 text-muted-foreground">
+                      {note.assessment}
+                    </p>
+                  ) : null}
+                  {note.uncertainty ? (
+                    <p className="mt-1 text-muted-foreground">
+                      Uncertainty: {note.uncertainty}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-2 gap-3 border-t pt-3">
+                <div>
+                  <p className="font-medium">Completed action</p>
+                  <p className="mt-1 text-muted-foreground">
+                    {action?.description ?? 'No completed action recorded.'}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-medium">Next step</p>
+                  <p className="mt-1 text-muted-foreground">
+                    {inspection.nextStep}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -224,33 +285,41 @@ function InspectionRecordCard({ inspection }: { inspection: Inspection }) {
 
 function FieldPhotoPreview() {
   const attachments = usePromptInputAttachments();
-  const photo = attachments.files[0];
 
-  if (!photo?.url) {
+  if (attachments.files.length === 0) {
     return null;
   }
 
   return (
     <PromptInputHeader>
-      <div className="flex min-w-0 items-center gap-2">
-        <Image
-          alt="Selected field photo preview"
-          className="size-12 shrink-0 rounded-md object-cover"
-          height={48}
-          src={photo.url}
-          unoptimized
-          width={48}
-        />
-        <span className="min-w-0 flex-1 truncate text-xs">
-          {photo.filename ?? 'Field photo'}
-        </span>
-        <PromptInputButton
-          aria-label="Remove field photo"
-          onClick={() => attachments.remove(photo.id)}
-          tooltip="Remove field photo"
-        >
-          <X aria-hidden="true" />
-        </PromptInputButton>
+      <div className="flex min-w-0 gap-2 overflow-x-auto">
+        {attachments.files.map((photo, index) => (
+          <div
+            className="flex min-w-40 items-center gap-2 rounded-md border p-1.5"
+            key={photo.id}
+          >
+            {photo.url ? (
+              <Image
+                alt={`Selected field photo ${index + 1}`}
+                className="size-10 shrink-0 rounded object-cover"
+                height={40}
+                src={photo.url}
+                unoptimized
+                width={40}
+              />
+            ) : null}
+            <span className="min-w-0 flex-1 truncate text-xs">
+              {photo.filename ?? `Field photo ${index + 1}`}
+            </span>
+            <PromptInputButton
+              aria-label={`Remove field photo ${index + 1}`}
+              onClick={() => attachments.remove(photo.id)}
+              tooltip="Remove field photo"
+            >
+              <X aria-hidden="true" />
+            </PromptInputButton>
+          </div>
+        ))}
       </div>
     </PromptInputHeader>
   );
@@ -261,10 +330,12 @@ function FieldPhotoButton({ disabled }: { disabled: boolean }) {
 
   return (
     <PromptInputButton
-      aria-label="Add field photo"
-      disabled={disabled || attachments.files.length > 0}
+      aria-label="Add field photos"
+      disabled={
+        disabled || attachments.files.length >= MAX_FIELD_PHOTOS_PER_TURN
+      }
       onClick={attachments.openFileDialog}
-      tooltip="Add field photo"
+      tooltip={`Add field photos (${attachments.files.length}/${MAX_FIELD_PHOTOS_PER_TURN})`}
     >
       <Camera aria-hidden="true" />
     </PromptInputButton>
@@ -284,9 +355,13 @@ function isChatResponse(value: unknown): value is MistralChatResponse {
     response.data.message.length > 0 &&
     Array.isArray(response.data.actions) &&
     response.data.actions.every(isAgentAction) &&
-    (response.data.photoAnalysis === undefined ||
-      (typeof response.data.photoAnalysis.photoId === 'string' &&
-        isFieldPhotoAnalysis(response.data.photoAnalysis.analysis)))
+    (response.data.photoAnalyses === undefined ||
+      (Array.isArray(response.data.photoAnalyses) &&
+        response.data.photoAnalyses.every(
+          (photoAnalysis) =>
+            typeof photoAnalysis.photoId === 'string' &&
+            isFieldPhotoAnalysis(photoAnalysis.analysis),
+        )))
   );
 }
 
@@ -318,6 +393,7 @@ function isAgentAction(value: unknown): value is AgentActionEvent {
 
   if (
     action.name === 'get_selected_parcel_context' ||
+    action.name === 'get_weather_forecast' ||
     action.name === 'send_reviewed_report'
   ) {
     return true;
@@ -327,6 +403,11 @@ function isAgentAction(value: unknown): value is AgentActionEvent {
     const draft = action.draft as Record<string, unknown>;
 
     return (
+      Array.isArray(action.targetParcelIds) &&
+      action.targetParcelIds.length > 0 &&
+      action.targetParcelIds.every(
+        (parcelId) => typeof parcelId === 'string' && parcelId.length > 0,
+      ) &&
       typeof draft.observation === 'string' &&
       typeof draft.assessment === 'string' &&
       typeof draft.uncertainty === 'string' &&
@@ -399,8 +480,8 @@ function ChatContent({
   const isSending = status === 'submitted' || status === 'streaming';
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <Conversation>
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+      <Conversation className="min-w-0">
         <ConversationContent>
           {messages.length === 0 ? (
             <ConversationEmptyState
@@ -464,15 +545,20 @@ function ChatContent({
                       </Badge>
                     );
                   })}
-                  {message.photo ? (
-                    <Image
-                      alt={message.photo.fileName}
-                      className="max-h-56 w-full rounded-md object-cover"
-                      height={900}
-                      src={message.photo.dataUrl}
-                      unoptimized
-                      width={1200}
-                    />
+                  {message.photos?.length ? (
+                    <div className="grid grid-cols-3 gap-2">
+                      {message.photos.map((photo) => (
+                        <Image
+                          alt={photo.fileName}
+                          className="aspect-square w-full rounded-md object-cover"
+                          height={400}
+                          key={photo.id}
+                          src={photo.dataUrl}
+                          unoptimized
+                          width={400}
+                        />
+                      ))}
+                    </div>
                   ) : null}
                   <MessageResponse>{message.content}</MessageResponse>
                 </MessageContent>
@@ -486,7 +572,7 @@ function ChatContent({
                 <Spinner />
                 <span>
                   {isAnalyzingPhoto
-                    ? 'Analyzing field photo…'
+                    ? 'Analyzing field photos…'
                     : `${ASSISTANT_IDENTITY.name} is thinking…`}
                 </span>
               </MessageContent>
@@ -521,11 +607,12 @@ function ChatContent({
 
       <PromptInput
         accept="image/jpeg,image/png,image/webp"
-        maxFiles={1}
+        maxFiles={MAX_FIELD_PHOTOS_PER_TURN}
         maxFileSize={FIELD_PHOTO_INPUT_MAX_BYTES}
+        multiple
         onError={({ message }) => onInputError(message)}
         onSubmit={async ({ files, text }) => {
-          await onSend(text, files[0]);
+          await onSend(text, files);
         }}
       >
         <FieldPhotoPreview />
@@ -638,10 +725,10 @@ export function AssistantPanel({
     setIsReportDialogOpen(true);
   }
 
-  async function sendMessage(rawText: string, file?: FileUIPart) {
+  async function sendMessage(rawText: string, files: FileUIPart[] = []) {
     const technicianText = rawText.trim();
 
-    if (!technicianText && !file) {
+    if (!technicianText && files.length === 0) {
       const message = 'Enter a message or attach a field photo before sending.';
 
       setError(message);
@@ -659,19 +746,19 @@ export function AssistantPanel({
     abortControllerRef.current = abortController;
     setError(null);
     setStatus('submitted');
-    setIsAnalyzingPhoto(Boolean(file));
+    setIsAnalyzingPhoto(files.length > 0);
 
     try {
       const technicianCreatedAt = new Date().toISOString();
-      const photo = file ? await prepareFieldPhoto(file) : undefined;
+      const photos = await Promise.all(files.map(prepareFieldPhoto));
       const content =
         technicianText ||
-        'Please analyze this field photo as supporting evidence for the selected parcel.';
+        'Please analyze these field photos as supporting evidence for the selected parcel.';
       const userMessage: MistralChatMessage = {
         id: nanoid(),
         role: 'user',
         content,
-        photo,
+        photos,
       };
       const nextMessages = [...messages.slice(-39), userMessage];
 
@@ -694,7 +781,8 @@ export function AssistantPanel({
           })),
           selectedParcelId,
           inspectionHistory,
-          photo,
+          selectedParcelNotes: demoState.parcelNotes[selectedParcelId] ?? [],
+          photos: photos.length > 0 ? photos : undefined,
         }),
         signal: abortController.signal,
       });
@@ -704,22 +792,29 @@ export function AssistantPanel({
         throw new Error(getErrorMessage(payload));
       }
 
-      let persistedPhoto: MistralChatPhoto | undefined;
+      let persistedPhotos: MistralChatPhoto[] = [];
 
-      if (photo) {
+      if (photos.length > 0) {
+        const analyses = new Map(
+          payload.data.photoAnalyses?.map(({ photoId, analysis }) => [
+            photoId,
+            analysis,
+          ]),
+        );
+
         if (
-          !payload.data.photoAnalysis ||
-          payload.data.photoAnalysis.photoId !== photo.id
+          analyses.size !== photos.length ||
+          photos.some(({ id }) => !analyses.has(id))
         ) {
           throw new Error(
-            'Mistral returned an incomplete field photo analysis. Please try again.',
+            'Mistral returned incomplete field photo analyses. Please try again.',
           );
         }
 
-        persistedPhoto = {
+        persistedPhotos = photos.map((photo) => ({
           ...photo,
-          analysis: payload.data.photoAnalysis.analysis,
-        };
+          analysis: analyses.get(photo.id),
+        }));
       }
 
       const saveNoteAction = payload.data.actions.find(
@@ -742,7 +837,13 @@ export function AssistantPanel({
         content: payload.data.message,
         actions: payload.data.actions.map((action) =>
           action.name === 'save_inspection_note'
-            ? { ...action, label: 'Inspection note saved' }
+            ? {
+                ...action,
+                label:
+                  action.targetParcelIds.length === 1
+                    ? 'Parcel note saved'
+                    : `Parcel note saved · ${action.targetParcelIds.length} parcels`,
+              }
             : action,
         ),
       };
@@ -760,6 +861,10 @@ export function AssistantPanel({
               id: userMessage.id,
               content: userMessage.content,
               createdAt: technicianCreatedAt,
+              photoIds:
+                persistedPhotos.length > 0
+                  ? persistedPhotos.map(({ id }) => id)
+                  : undefined,
             },
             assistant: {
               id: assistantMessage.id,
@@ -771,19 +876,26 @@ export function AssistantPanel({
             saveNoteAction?.name === 'save_inspection_note'
               ? saveNoteAction.draft
               : undefined,
-          photo: persistedPhoto
-            ? {
-                id: persistedPhoto.id,
-                capturedAt: persistedPhoto.capturedAt,
-                dataUrl: persistedPhoto.dataUrl,
-                analysis: persistedPhoto.analysis,
-              }
-            : undefined,
+          photos: persistedPhotos.map((photo) => ({
+            id: photo.id,
+            capturedAt: photo.capturedAt,
+            dataUrl: photo.dataUrl,
+            analysis: photo.analysis,
+          })),
         });
-      } else if (saveNoteAction || persistedPhoto) {
+      } else if (persistedPhotos.length > 0) {
         throw new Error(
           'The selected parcel changed before the field inspection could be saved.',
         );
+      }
+
+      if (saveNoteAction?.name === 'save_inspection_note') {
+        nextState = applyParcelNote(nextState, {
+          createdAt: assistantCreatedAt,
+          noteDraft: saveNoteAction.draft,
+          targetParcelIds: saveNoteAction.targetParcelIds,
+          turnId: userMessage.id,
+        });
       }
 
       if (generatedReport?.name === 'generate_inspection_report') {
@@ -818,8 +930,8 @@ export function AssistantPanel({
 
       setMessages([
         ...nextMessages.map((message) =>
-          message.id === userMessage.id && persistedPhoto
-            ? { ...message, photo: persistedPhoto }
+          message.id === userMessage.id && persistedPhotos.length > 0
+            ? { ...message, photos: persistedPhotos }
             : message,
         ),
         assistantMessage,
@@ -898,7 +1010,7 @@ export function AssistantPanel({
             <X aria-hidden="true" />
           </Button>
         </CardHeader>
-        <CardContent className="flex min-h-0 flex-1 p-4">
+        <CardContent className="flex min-h-0 min-w-0 flex-1 overflow-hidden p-4">
           <ChatContent
             error={error}
             inspection={inspection}

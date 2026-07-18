@@ -13,7 +13,7 @@ import type {
   ParcelCollection,
   ParcelFeature,
   ParcelGeometry,
-  ParcelMoistureStatus,
+  OperationalStatus,
   SectorFeature,
 } from '@/types/agricultural-operations';
 
@@ -38,7 +38,7 @@ type ClusterPointProperties = {
   label: string;
   totalCount: number;
   flaggedCount: number;
-  moistureStatus: ParcelMoistureStatus;
+  operationalStatus: OperationalStatus;
 };
 
 type ClusterMarkerRecord = {
@@ -48,7 +48,7 @@ type ClusterMarkerRecord = {
 
 type ParcelMarkerRecord = {
   marker: maplibregl.Marker;
-  moistureStatus: ParcelMoistureStatus;
+  operationalStatus: OperationalStatus;
 };
 
 const CLUSTER_LABELS: Record<ParcelCluster, string> = {
@@ -93,20 +93,22 @@ function getClusterBounds(parcels: ParcelCollection, cluster: ParcelCluster) {
   return positions.length > 0 ? boundsFromPositions(positions) : undefined;
 }
 
-function getHighestPriorityStatus(
-  parcels: ParcelFeature[],
-): ParcelMoistureStatus {
+function getHighestPriorityStatus(parcels: ParcelFeature[]): OperationalStatus {
   if (
-    parcels.some(({ properties }) => properties.moistureStatus === 'critical')
+    parcels.some(
+      ({ properties }) => properties.operationalStatus === 'critical',
+    )
   ) {
     return 'critical';
   }
 
-  if (parcels.some(({ properties }) => properties.moistureStatus === 'watch')) {
-    return 'watch';
+  if (
+    parcels.some(({ properties }) => properties.operationalStatus === 'review')
+  ) {
+    return 'review';
   }
 
-  return 'stable';
+  return 'normal';
 }
 
 export function createClusterPoints(
@@ -120,7 +122,7 @@ export function createClusterPoints(
     const clusterBounds = getClusterBounds(parcels, parcelCluster);
     const center = clusterBounds?.getCenter() ?? { lng: 0, lat: 0 };
     const flaggedCount = clusterParcels.filter(
-      ({ properties }) => properties.moistureStatus !== 'stable',
+      ({ properties }) => properties.operationalStatus !== 'normal',
     ).length;
 
     return {
@@ -134,7 +136,7 @@ export function createClusterPoints(
         label,
         totalCount: clusterParcels.length,
         flaggedCount,
-        moistureStatus: getHighestPriorityStatus(clusterParcels),
+        operationalStatus: getHighestPriorityStatus(clusterParcels),
       },
     } satisfies Feature<Point, ClusterPointProperties>;
   });
@@ -152,12 +154,12 @@ function createMapLabelElement(label: string, showGrape = false) {
   return element;
 }
 
-function getStatusColor(status: ParcelMoistureStatus) {
+function getStatusColor(status: OperationalStatus) {
   if (status === 'critical') {
     return CRITICAL_PARCEL_COLOR;
   }
 
-  if (status === 'watch') {
+  if (status === 'review') {
     return REVIEW_PARCEL_COLOR;
   }
 
@@ -165,11 +167,11 @@ function getStatusColor(status: ParcelMoistureStatus) {
 }
 
 export function getMapLabelColor(
-  moistureStatus: ParcelMoistureStatus,
+  operationalStatus: OperationalStatus,
   showParcelStatus: boolean,
 ) {
   return showParcelStatus
-    ? getStatusColor(moistureStatus)
+    ? getStatusColor(operationalStatus)
     : NEUTRAL_PARCEL_COLOR;
 }
 
@@ -178,13 +180,13 @@ function updateClusterMarker(
   showParcelStatus: boolean,
 ) {
   const element = markerRecord.marker.getElement();
-  const { label, moistureStatus, totalCount } = markerRecord.properties;
+  const { label, operationalStatus, totalCount } = markerRecord.properties;
   const markerLabel = `${label} · ${totalCount}`;
 
   element.textContent = markerLabel;
   element.title = markerLabel;
   element.style.backgroundColor = getMapLabelColor(
-    moistureStatus,
+    operationalStatus,
     showParcelStatus,
   );
 }
@@ -194,7 +196,7 @@ function updateParcelMarker(
   showParcelStatus: boolean,
 ) {
   markerRecord.marker.getElement().style.backgroundColor = getMapLabelColor(
-    markerRecord.moistureStatus,
+    markerRecord.operationalStatus,
     showParcelStatus,
   );
 }
@@ -208,10 +210,10 @@ function getClusterCircleColor(
 
   return [
     'match',
-    ['get', 'moistureStatus'],
+    ['get', 'operationalStatus'],
     'critical',
     CRITICAL_PARCEL_COLOR,
-    'watch',
+    'review',
     REVIEW_PARCEL_COLOR,
     STABLE_PARCEL_COLOR,
   ];
@@ -226,10 +228,10 @@ export function getParcelFillColor(
 
   return [
     'match',
-    ['get', 'moistureStatus'],
+    ['get', 'operationalStatus'],
     'critical',
     CRITICAL_PARCEL_COLOR,
-    'watch',
+    'review',
     REVIEW_PARCEL_COLOR,
     STABLE_PARCEL_COLOR,
   ];
@@ -371,7 +373,7 @@ export function ParcelMap({
           .addTo(map);
         const markerRecord = {
           marker,
-          moistureStatus: parcel.properties.moistureStatus,
+          operationalStatus: parcel.properties.operationalStatus,
         };
 
         updateParcelMarker(markerRecord, showParcelStatusRef.current);

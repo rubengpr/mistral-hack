@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import type { ParcelDetail } from '@/lib/services/parcel-detail-service';
-import type { ParcelMoistureStatus } from '@/types/agricultural-operations';
+import type { OperationalStatus } from '@/types/agricultural-operations';
 
 const DATE_FORMATTER = new Intl.DateTimeFormat('en', {
   dateStyle: 'medium',
@@ -29,15 +29,15 @@ const DATE_FORMATTER = new Intl.DateTimeFormat('en', {
   timeZone: 'Europe/Paris',
 });
 
-const STATUS_LABELS: Record<ParcelMoistureStatus, string> = {
-  stable: 'Stable',
-  watch: 'Watch',
+const STATUS_LABELS: Record<OperationalStatus, string> = {
+  normal: 'Normal',
+  review: 'Review',
   critical: 'Critical',
 };
 
 type ParcelDetailPageProps = ParcelDetail;
 
-function StatusBadge({ status }: { status: ParcelMoistureStatus }) {
+function StatusBadge({ status }: { status: OperationalStatus }) {
   return (
     <Badge variant={status === 'critical' ? 'destructive' : 'secondary'}>
       {STATUS_LABELS[status]}
@@ -105,7 +105,7 @@ export function ParcelDetailPage({
                 {properties.municipality}, {properties.department}
               </p>
             </div>
-            <StatusBadge status={properties.moistureStatus} />
+            <StatusBadge status={properties.operationalStatus} />
           </div>
         </section>
 

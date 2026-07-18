@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import type { ActiveFinding } from '@/types/operations-dashboard';
 import type {
   ParcelCollection,
+  InspectionNote,
   ParcelProperties,
   ParcelReviewSummary,
   SectorFeature,
@@ -30,6 +31,7 @@ type ParcelMapCardProps = {
   onCloseDetails?: () => void;
   onSelectParcel: (parcelId: string) => void;
   parcels: ParcelCollection;
+  parcelNotes: InspectionNote[];
   reviewSummary?: ParcelReviewSummary;
   selectedParcel: ParcelProperties;
   sensorCount: number;
@@ -44,6 +46,7 @@ export function ParcelMapCard({
   onCloseDetails,
   onSelectParcel,
   parcels,
+  parcelNotes,
   reviewSummary,
   selectedParcel,
   sensorCount,
@@ -116,6 +119,7 @@ export function ParcelMapCard({
           onAskVinea={onAskVinea}
           onClose={onCloseDetails}
           parcel={selectedParcel}
+          notes={parcelNotes}
           reviewSummary={reviewSummary}
           sensorCount={sensorCount}
         />
