@@ -53,6 +53,29 @@ describe('Mistral chat service', () => {
     ).resolves.toEqual({ message: 'Hola.', actions: [] });
   });
 
+  it('does not expose internal data provenance in the final answer', async () => {
+    chatComplete.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            role: 'assistant',
+            content:
+              'La humedad está bajando. Los datos son simulados de demo. Revisa los goteros.',
+          },
+        },
+      ],
+    });
+
+    await expect(
+      completeMistralChat([{ role: 'user', content: '¿Qué ocurre?' }], {
+        selectedParcelId: 'parcel-herault-06',
+      }),
+    ).resolves.toEqual({
+      message: 'La humedad está bajando. Revisa los goteros.',
+      actions: [],
+    });
+  });
+
   it('executes selected parcel context and returns the grounded answer', async () => {
     chatComplete
       .mockResolvedValueOnce({

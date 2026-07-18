@@ -49,6 +49,58 @@ describe('LocalStorageDemoStateRepository', () => {
     );
   });
 
+  it('persists report delivery metadata without storing the PDF artifact', () => {
+    const storage = new MemoryStorage();
+    const repository = new LocalStorageDemoStateRepository(storage);
+    const state = repository.load();
+
+    repository.save({
+      ...state,
+      report: {
+        reportId: 'report-01',
+        recipient: 'rubengpr@gmail.com',
+        subject: 'Vinea inspection report',
+        status: 'sent',
+        generatedAt: '2026-07-18T12:00:00Z',
+        providerMessageId: 'resend-message-01',
+      },
+    });
+
+    const stored = repository.load();
+
+    expect(stored.report).toMatchObject({
+      reportId: 'report-01',
+      status: 'sent',
+    });
+    expect(JSON.stringify(stored)).not.toContain('pdfBase64');
+  });
+
+  it('preserves a field photo and its structured analysis', () => {
+    const storage = new MemoryStorage();
+    const repository = new LocalStorageDemoStateRepository(storage);
+    const state = repository.load();
+
+    state.activeInspection.photos.push({
+      id: 'photo-01',
+      dataUrl: 'data:image/jpeg;base64,/9j/',
+      capturedAt: '2026-07-18T12:00:00Z',
+      analysis: {
+        observation: 'Leaf edges appear curled.',
+        inference: 'The signs may be compatible with water stress.',
+        uncertainty: 'One photograph cannot confirm the cause.',
+        recommendedVerification: 'Check soil moisture in the row.',
+      },
+    });
+    repository.save(state);
+
+    expect(repository.load().activeInspection.photos[0]).toMatchObject({
+      id: 'photo-01',
+      analysis: {
+        observation: 'Leaf edges appear curled.',
+      },
+    });
+  });
+
   it('resets to a fresh canonical state', () => {
     const storage = new MemoryStorage();
     const repository = new LocalStorageDemoStateRepository(storage);

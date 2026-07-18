@@ -21,7 +21,19 @@ describe('parcel context service', () => {
           createdAt: '2026-07-18T10:00:00Z',
         },
       ],
-      photos: [],
+      photos: [
+        {
+          id: 'photo-test',
+          dataUrl: 'data:image/jpeg;base64,/9j/',
+          capturedAt: '2026-07-18T10:05:00Z',
+          analysis: {
+            observation: 'Leaf edges appear curled.',
+            inference: 'The signs may be compatible with water stress.',
+            uncertainty: 'One photograph cannot confirm the cause.',
+            recommendedVerification: 'Check soil moisture in the row.',
+          },
+        },
+      ],
       actions: [],
       nextStep: 'Inspect Sector B.',
     });
@@ -50,6 +62,11 @@ describe('parcel context service', () => {
     expect(context.history.inspection?.notes[0]?.content).toContain(
       'irrigation line',
     );
+    expect(context.history.inspection?.photos[0]).toMatchObject({
+      id: 'photo-test',
+      analysis: { observation: 'Leaf edges appear curled.' },
+    });
+    expect(context.history.inspection?.photos[0]).not.toHaveProperty('dataUrl');
   });
 
   it('returns honest empty alert and inspection history states', () => {
