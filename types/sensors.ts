@@ -1,8 +1,10 @@
 import type { ParcelMoistureStatus } from '@/types/agricultural-operations';
 
-export type SensorType = 'soil-moisture' | 'temperature' | 'humidity' | 'soil-temperature';
+export type SensorType =
+  'soil-moisture' | 'temperature' | 'humidity' | 'soil-temperature';
 
-export type SensorStatus = 'active' | 'maintenance-needed' | 'offline' | 'calibrating';
+export type SensorStatus =
+  'active' | 'maintenance-needed' | 'offline' | 'calibrating';
 
 export type SensorQuality = 'simulated' | 'verified' | 'estimated';
 
@@ -12,7 +14,7 @@ export type SensorQuality = 'simulated' | 'verified' | 'estimated';
 export type SensorMetadata = {
   id: string;
   parcelId: string;
-  sectorId: string;
+  sectorId?: string;
   type: SensorType;
   name: string;
   installedAt: string;
