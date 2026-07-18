@@ -73,7 +73,9 @@ describe('canonical demo scenario', () => {
       .map(({ value }) => value);
 
     const moistureObservations = scenario.observations.filter(
-      (observation) => observation.metric === 'soil-moisture',
+      (observation) =>
+        observation.metric === 'soil-moisture' &&
+        observation.sectorId === 'sector-b',
     );
 
     expect(moistureObservations).toHaveLength(199);
@@ -82,6 +84,15 @@ describe('canonical demo scenario', () => {
       '2026-07-18T08:00:00Z',
     );
     expect(moistureValues.slice(-7)).toEqual([34, 31, 28, 25, 22, 19, 16]);
+    expect(
+      scenario.observations
+        .filter(
+          (observation) =>
+            observation.metric === 'soil-moisture' &&
+            observation.sectorId === 'sector-reference',
+        )
+        .map(({ value }) => value),
+    ).toEqual([30, 34, 33, 32, 31, 30, 29]);
     expect(scenario.irrigationEvents).toHaveLength(9);
     expect(scenario.irrigationEvents.at(0)?.startedAt).toBe(
       '2026-06-02T18:00:00Z',
@@ -122,34 +133,40 @@ describe('canonical demo scenario', () => {
     ).toBe(true);
   });
 
-  it('exposes exactly one critical parcel and one parcel for review', () => {
+  it('keeps sensor moisture separate from the regional operational review', () => {
     const scenario = getCanonicalDemoScenario();
-    const statuses = Object.groupBy(
+    const moistureStatuses = Object.groupBy(
       scenario.parcels.features,
       ({ properties }) => properties.moistureStatus,
     );
-    const reviewParcel = scenario.parcels.features.find(
-      ({ properties }) => properties.id === REVIEW_PARCEL_ID,
+    const operationalStatuses = Object.groupBy(
+      scenario.parcels.features,
+      ({ properties }) => properties.operationalStatus,
     );
 
-    expect(statuses.stable).toHaveLength(22);
-    expect(statuses.watch).toHaveLength(1);
-    expect(statuses.critical).toHaveLength(1);
-    expect(reviewParcel?.properties.currentSoilMoisturePercent).toBe(24);
-    expect(scenario.reviewSummaries).toEqual([
-      expect.objectContaining({
-        parcelId: AFFECTED_PARCEL_ID,
-        status: 'critical',
-        source: 'mistral-morning-review',
-        quality: 'simulated',
-      }),
-      expect.objectContaining({
-        parcelId: REVIEW_PARCEL_ID,
-        status: 'watch',
-        source: 'mistral-morning-review',
-        quality: 'simulated',
-      }),
-    ]);
+    expect(moistureStatuses.stable).toHaveLength(23);
+    expect(moistureStatuses.critical).toHaveLength(1);
+    expect(operationalStatuses.normal).toHaveLength(17);
+    expect(operationalStatuses.review).toHaveLength(6);
+    expect(operationalStatuses.critical).toHaveLength(1);
+    expect(
+      scenario.parcels.features
+        .filter(({ properties }) => properties.cluster === 'gard')
+        .every(({ properties }) => properties.moistureStatus === 'stable'),
+    ).toBe(true);
+    expect(scenario.reviewSummaries).toHaveLength(7);
+    expect(scenario.reviewSummaries[0]).toMatchObject({
+      parcelId: AFFECTED_PARCEL_ID,
+      status: 'critical',
+    });
+    expect(
+      scenario.reviewSummaries
+        .slice(1)
+        .every(
+          ({ status, quality }) =>
+            status === 'review' && quality === 'simulated',
+        ),
+    ).toBe(true);
   });
 
   it('keeps the active inspection attached only to the critical parcel', () => {
@@ -157,6 +174,16 @@ describe('canonical demo scenario', () => {
 
     expect(state.activeInspection.parcelId).toBe(AFFECTED_PARCEL_ID);
     expect(state.activeInspection.parcelId).not.toBe(REVIEW_PARCEL_ID);
+  });
+
+  it('treats the critical irrigation issue as a field-verification hypothesis', () => {
+    const finding = getCanonicalDemoScenario().findings[0];
+
+    expect(finding.title).toBe('Irrigation may not be reaching Sector B');
+    expect(finding.summary).toContain('90 minutes on July 12');
+    expect(finding.summary).toContain('fell from 34% to 16%');
+    expect(finding.summary).not.toMatch(/hose is (broken|obstructed)/i);
+    expect(finding.recommendedVerification).toContain('Check');
   });
 
   it('returns defensive copies of fixtures', () => {

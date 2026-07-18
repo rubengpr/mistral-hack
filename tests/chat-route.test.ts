@@ -61,13 +61,15 @@ describe('chat route field photos', () => {
       createRequest({
         messages: [{ role: 'user', content: '' }],
         selectedParcelId: 'parcel-herault-06',
-        photo: {
-          id: 'photo-01',
-          capturedAt: '2026-07-18T12:00:00Z',
-          dataUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBA==',
-          fileName: 'field-photo.gif',
-          mediaType: 'image/gif',
-        },
+        photos: [
+          {
+            id: 'photo-01',
+            capturedAt: '2026-07-18T12:00:00Z',
+            dataUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBA==',
+            fileName: 'field-photo.gif',
+            mediaType: 'image/gif',
+          },
+        ],
       }),
     );
 
@@ -81,13 +83,15 @@ describe('chat route field photos', () => {
       createRequest({
         messages: [{ role: 'user', content: '' }],
         selectedParcelId: 'parcel-herault-06',
-        photo: {
-          id: 'photo-01',
-          capturedAt: '2026-07-18T12:00:00Z',
-          dataUrl: `data:image/jpeg;base64,${oversizedImage}`,
-          fileName: 'field-photo.jpg',
-          mediaType: 'image/jpeg',
-        },
+        photos: [
+          {
+            id: 'photo-01',
+            capturedAt: '2026-07-18T12:00:00Z',
+            dataUrl: `data:image/jpeg;base64,${oversizedImage}`,
+            fileName: 'field-photo.jpg',
+            mediaType: 'image/jpeg',
+          },
+        ],
       }),
     );
 
@@ -95,20 +99,21 @@ describe('chat route field photos', () => {
     expect(analyzeFieldPhoto).not.toHaveBeenCalled();
   });
 
-  it('accepts a photo-only turn and adds its analysis to chat context', async () => {
+  it('accepts up to three photos and adds their analyses to chat context', async () => {
     const state = getCanonicalDemoState();
+    const photos = ['photo-01', 'photo-02', 'photo-03'].map((id) => ({
+      id,
+      capturedAt: '2026-07-18T12:00:00Z',
+      dataUrl: 'data:image/jpeg;base64,/9j/',
+      fileName: `${id}.jpg`,
+      mediaType: 'image/jpeg',
+    }));
     const response = await POST(
       createRequest({
         messages: [{ role: 'user', content: '' }],
         selectedParcelId: state.activeInspection.parcelId,
         inspectionHistory: state.activeInspection,
-        photo: {
-          id: 'photo-01',
-          capturedAt: '2026-07-18T12:00:00Z',
-          dataUrl: 'data:image/jpeg;base64,/9j/',
-          fileName: 'field-photo.jpg',
-          mediaType: 'image/jpeg',
-        },
+        photos,
       }),
     );
 
@@ -117,15 +122,74 @@ describe('chat route field photos', () => {
       success: true,
       data: {
         message: 'Analysis ready.',
-        photoAnalysis: { photoId: 'photo-01', analysis },
+        photoAnalyses: [
+          { photoId: 'photo-01', analysis },
+          { photoId: 'photo-02', analysis },
+          { photoId: 'photo-03', analysis },
+        ],
       },
     });
     expect(completeMistralChat).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({
-          content: expect.stringContaining('Supporting field photo analysis'),
+          content: expect.stringContaining('Supporting field photo analyses'),
         }),
       ]),
+      expect.objectContaining({
+        inspectionHistory: expect.objectContaining({
+          photos: photos.map(({ id }) =>
+            expect.objectContaining({ id, analysis }),
+          ),
+        }),
+      }),
+    );
+    expect(analyzeFieldPhoto).toHaveBeenCalledTimes(3);
+  });
+
+  it('rejects more than three photos', async () => {
+    const state = getCanonicalDemoState();
+    const photos = ['01', '02', '03', '04'].map((suffix) => ({
+      id: `photo-${suffix}`,
+      capturedAt: '2026-07-18T12:00:00Z',
+      dataUrl: 'data:image/jpeg;base64,/9j/',
+      fileName: `photo-${suffix}.jpg`,
+      mediaType: 'image/jpeg',
+    }));
+    const response = await POST(
+      createRequest({
+        messages: [{ role: 'user', content: '' }],
+        selectedParcelId: state.activeInspection.parcelId,
+        inspectionHistory: state.activeInspection,
+        photos,
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(analyzeFieldPhoto).not.toHaveBeenCalled();
+  });
+
+  it('preserves saved photo evidence for a follow-up without re-uploading it', async () => {
+    const state = getCanonicalDemoState();
+    state.activeInspection.photos.push({
+      id: 'photo-01',
+      capturedAt: '2026-07-18T12:00:00Z',
+      dataUrl: 'data:image/jpeg;base64,/9j/',
+      analysis,
+    });
+    const response = await POST(
+      createRequest({
+        messages: [
+          { role: 'user', content: 'What did you see in the pictures?' },
+        ],
+        selectedParcelId: state.activeInspection.parcelId,
+        inspectionHistory: state.activeInspection,
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(analyzeFieldPhoto).not.toHaveBeenCalled();
+    expect(completeMistralChat).toHaveBeenCalledWith(
+      [{ role: 'user', content: 'What did you see in the pictures?' }],
       expect.objectContaining({
         inspectionHistory: expect.objectContaining({
           photos: [expect.objectContaining({ id: 'photo-01', analysis })],

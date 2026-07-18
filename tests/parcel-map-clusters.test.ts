@@ -18,30 +18,30 @@ describe('parcel map cluster summaries', () => {
     expect(summaries.herault).toMatchObject({
       totalCount: 6,
       flaggedCount: 1,
-      moistureStatus: 'critical',
+      operationalStatus: 'critical',
     });
     expect(summaries.aude).toMatchObject({
       totalCount: 6,
-      flaggedCount: 1,
-      moistureStatus: 'watch',
+      flaggedCount: 0,
+      operationalStatus: 'normal',
     });
     expect(summaries.gard).toMatchObject({
       totalCount: 6,
-      flaggedCount: 0,
-      moistureStatus: 'stable',
+      flaggedCount: 6,
+      operationalStatus: 'review',
     });
     expect(summaries['pyrenees-orientales']).toMatchObject({
       totalCount: 6,
       flaggedCount: 0,
-      moistureStatus: 'stable',
+      operationalStatus: 'normal',
     });
   });
 
   it('uses neutral labels by default and status colors when enabled', () => {
-    expect(getMapLabelColor('stable', false)).toBe('#2f3632');
+    expect(getMapLabelColor('normal', false)).toBe('#2f3632');
     expect(getMapLabelColor('critical', false)).toBe('#2f3632');
-    expect(getMapLabelColor('stable', true)).toBe('#4f7f5e');
-    expect(getMapLabelColor('watch', true)).toBe('#d39a3c');
+    expect(getMapLabelColor('normal', true)).toBe('#4f7f5e');
+    expect(getMapLabelColor('review', true)).toBe('#d39a3c');
     expect(getMapLabelColor('critical', true)).toBe('#b55448');
   });
 });

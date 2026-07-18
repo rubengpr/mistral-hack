@@ -45,6 +45,7 @@ describe('LocalStorageDemoStateRepository', () => {
       role: 'technician',
       content: 'Record the localized symptoms.',
       createdAt: '2026-07-18T09:29:00Z',
+      photoIds: ['photo-01'],
     });
     firstRepository.save(state);
 
@@ -59,9 +60,37 @@ describe('LocalStorageDemoStateRepository', () => {
             observation: 'Mild symptoms are localized in Sector B.',
           }),
         ],
-        conversation: [expect.objectContaining({ id: 'turn-01' })],
+        conversation: [
+          expect.objectContaining({
+            id: 'turn-01',
+            photoIds: ['photo-01'],
+          }),
+        ],
       }),
     );
+  });
+
+  it('persists parcel notes outside the active inspection', () => {
+    const storage = new MemoryStorage();
+    const repository = new LocalStorageDemoStateRepository(storage);
+    const state = repository.load();
+
+    state.parcelNotes['parcel-gard-06'] = [
+      {
+        id: 'note-gard-01',
+        content: 'The irrigation plan requires an update.',
+        createdAt: '2026-07-18T12:00:00Z',
+        nextStep: 'Increase irrigation volume by 25%.',
+      },
+    ];
+    repository.save(state);
+
+    expect(repository.load().parcelNotes['parcel-gard-06']).toEqual([
+      expect.objectContaining({
+        id: 'note-gard-01',
+        nextStep: 'Increase irrigation volume by 25%.',
+      }),
+    ]);
   });
 
   it('persists report delivery metadata without storing the PDF artifact', () => {

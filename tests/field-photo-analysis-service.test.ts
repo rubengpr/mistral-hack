@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const chatParse = vi.hoisted(() => vi.fn());
 
@@ -21,8 +21,13 @@ const analysis = {
   recommendedVerification: 'Check soil moisture and inspect the emitters.',
 };
 
+beforeEach(() => {
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Offline')));
+});
+
 afterEach(() => {
   chatParse.mockReset();
+  vi.unstubAllGlobals();
 });
 
 describe('field photo analysis service', () => {
@@ -41,7 +46,7 @@ describe('field photo analysis service', () => {
           mediaType: 'image/jpeg',
         },
         technicianMessage: 'What can you see?',
-        parcelContext: getSelectedParcelContext('parcel-herault-06'),
+        parcelContext: await getSelectedParcelContext('parcel-herault-06'),
       }),
     ).resolves.toEqual(analysis);
 
@@ -70,7 +75,7 @@ describe('field photo analysis service', () => {
           mediaType: 'image/jpeg',
         },
         technicianMessage: '',
-        parcelContext: getSelectedParcelContext('parcel-herault-06'),
+        parcelContext: await getSelectedParcelContext('parcel-herault-06'),
       }),
     ).rejects.toBeInstanceOf(FieldPhotoAnalysisError);
   });

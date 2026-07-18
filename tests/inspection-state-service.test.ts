@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { getCanonicalDemoState } from '@/lib/fixtures/canonical-demo-scenario';
 import {
+  applyParcelNote,
   applySuccessfulInspectionTurn,
   InspectionStateMismatchError,
 } from '@/lib/services/inspection-state-service';
@@ -20,6 +21,31 @@ const turn = {
 };
 
 describe('inspection state service', () => {
+  it('stores one operational note against every targeted parcel', () => {
+    const state = getCanonicalDemoState();
+    const nextState = applyParcelNote(state, {
+      createdAt: '2026-07-18T12:00:01Z',
+      noteDraft: {
+        observation: 'The Gard parcels require an irrigation plan update.',
+        assessment: 'The current plan may not cover forecast demand.',
+        uncertainty: 'Field demand must still be monitored.',
+        nextStep: 'Increase irrigation volume by 25%.',
+      },
+      targetParcelIds: ['parcel-gard-01', 'parcel-gard-06'],
+      turnId: 'turn-technician-01',
+    });
+
+    expect(nextState.parcelNotes['parcel-gard-01']).toEqual([
+      expect.objectContaining({
+        nextStep: 'Increase irrigation volume by 25%.',
+      }),
+    ]);
+    expect(nextState.parcelNotes['parcel-gard-06']).toEqual(
+      nextState.parcelNotes['parcel-gard-01'],
+    );
+    expect(state.parcelNotes).toEqual({});
+  });
+
   it('persists a successful turn and structured note atomically', () => {
     const state = getCanonicalDemoState();
     const nextState = applySuccessfulInspectionTurn(state, {
@@ -70,6 +96,25 @@ describe('inspection state service', () => {
         description: 'The technician cleared the blocked emitter.',
       }),
     ]);
+  });
+
+  it('persists multiple photos from the same turn', () => {
+    const state = getCanonicalDemoState();
+    const photos = ['photo-01', 'photo-02', 'photo-03'].map((id) => ({
+      id,
+      capturedAt: '2026-07-18T12:00:00Z',
+      dataUrl: 'data:image/jpeg;base64,/9j/',
+    }));
+    const nextState = applySuccessfulInspectionTurn(state, {
+      selectedParcelId: state.activeInspection.parcelId,
+      turn,
+      photos,
+    });
+
+    expect(nextState.activeInspection.photos).toEqual(photos);
+    expect(nextState.activeInspection.conversation[0]).toMatchObject({
+      photoIds: ['photo-01', 'photo-02', 'photo-03'],
+    });
   });
 
   it('rejects a turn for a parcel outside the active inspection', () => {

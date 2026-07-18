@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   getSelectedParcelContext,
@@ -6,8 +6,16 @@ import {
 } from '@/lib/services/parcel-context-service';
 
 describe('parcel context service', () => {
-  it('aggregates the canonical alert, sensors, weather, and history', () => {
-    const context = getSelectedParcelContext('parcel-herault-06', {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Offline')));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('aggregates the canonical alert, sensors, weather, and history', async () => {
+    const context = await getSelectedParcelContext('parcel-herault-06', {
       id: 'inspection-test',
       findingId: 'finding-soil-moisture-01',
       parcelId: 'parcel-herault-06',
@@ -43,6 +51,11 @@ describe('parcel context service', () => {
     expect(context.alerts[0]).toMatchObject({
       id: 'finding-soil-moisture-01',
       evidenceQuality: 'simulated',
+      comparison: {
+        affectedSectorMoisturePercent: 16,
+        referenceSectorMoisturePercent: 29,
+        inference: expect.stringContaining('field verification'),
+      },
     });
     expect(context.sensors.items.length).toBeGreaterThan(0);
     expect(context.sensors.items[0]).toEqual(
@@ -53,9 +66,9 @@ describe('parcel context service', () => {
       }),
     );
     expect(context.weather).toMatchObject({
-      sourceLabel: 'Simulated demo weather',
-      startsOn: '2026-07-14',
-      endsOn: '2026-07-18',
+      sourceLabel: 'Simulated demo forecast',
+      startsOn: '2026-07-18',
+      endsOn: '2026-07-24',
       quality: 'simulated',
     });
     expect(context.history.irrigationEvents.length).toBeGreaterThan(0);
@@ -69,8 +82,8 @@ describe('parcel context service', () => {
     expect(context.history.inspection?.photos[0]).not.toHaveProperty('dataUrl');
   });
 
-  it('returns honest empty alert and inspection history states', () => {
-    const context = getSelectedParcelContext('parcel-herault-01');
+  it('returns honest empty alert and inspection history states', async () => {
+    const context = await getSelectedParcelContext('parcel-herault-01');
 
     expect(context.alerts).toEqual([]);
     expect(context.history.irrigationEvents).toEqual([]);
@@ -78,8 +91,8 @@ describe('parcel context service', () => {
     expect(context.weather.daily).toHaveLength(7);
   });
 
-  it('rejects an unknown selected parcel', () => {
-    expect(() => getSelectedParcelContext('unknown-parcel')).toThrow(
+  it('rejects an unknown selected parcel', async () => {
+    await expect(getSelectedParcelContext('unknown-parcel')).rejects.toThrow(
       ParcelContextNotFoundError,
     );
   });
