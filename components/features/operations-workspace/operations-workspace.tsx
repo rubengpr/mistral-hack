@@ -143,7 +143,8 @@ export function OperationsWorkspace({ route }: OperationsWorkspaceProps) {
               'min-h-0 min-w-0',
               route === 'map'
                 ? 'h-full overflow-hidden'
-                : route === 'weather' && 'overflow-y-auto',
+                : (route === 'weather' || route === 'sensors') &&
+                    'overflow-y-auto',
             )}
           >
             {route === 'weather' ? (
