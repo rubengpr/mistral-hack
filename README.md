@@ -13,7 +13,14 @@ The current voice implementation combines:
 
 Voice mode is intentionally semi-duplex for demo reliability: microphone audio
 is not sent while Vinea is speaking. Text remains available as a fallback. Tool
-execution and parcel-specific agent context are the next implementation layer.
+execution uses the parcel currently selected in the workspace.
+
+## Agent actions
+
+- `get_selected_parcel_context`: retrieves parcel metadata, active alerts,
+  latest sensor readings and trends, recent weather, irrigation events, and
+  locally saved inspection history. The chat shows a visible completion badge
+  whenever Mistral invokes the action.
 
 ## Setup
 

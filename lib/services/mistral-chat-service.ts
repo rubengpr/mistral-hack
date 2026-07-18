@@ -1,12 +1,23 @@
-import type { ContentChunk } from '@mistralai/mistralai/models/components';
+import type {
+  ChatCompletionRequest,
+  ContentChunk,
+} from '@mistralai/mistralai/models/components';
 
 import { createMistralClient } from '@/lib/integrations/mistral/client';
+import {
+  AGENT_TOOL_DEFINITIONS,
+  executeAgentTool,
+} from '@/lib/services/agent-tool-registry';
+import type { AgentActionEvent, AgentToolContext } from '@/types/agent-tools';
 import type { MistralChatRequestMessage } from '@/types/mistral-chat';
 
 const SPOKEN_CONVERSATION_SYSTEM_PROMPT = `You are Vinea, a calm and practical vineyard operations assistant speaking with an agricultural technician.
 Reply in the same language as the technician. Keep answers concise: normally one to three short sentences.
 Write for speech: use plain text, pronounceable numbers, and no Markdown, emoji, headings, or lists.
-Do not claim to have parcel data or tools that have not been provided. If context is missing, say so briefly.`;
+Use the parcel-context tool whenever the technician asks about the selected parcel, alerts, sensors, recent weather, irrigation, notes, actions, or history.
+Treat tool results as evidence. Preserve the factual meaning of alert titles and descriptions; you may translate them, but do not reclassify them as drought, disease, failure, or another diagnosis.
+Clearly distinguish observations from inference, mention uncertainty when relevant, and never invent missing data.
+When the tool marks evidence as simulated, explicitly say that it is simulated demo data.`;
 
 export class EmptyMistralResponseError extends Error {
   constructor() {
@@ -38,20 +49,77 @@ export function extractMistralText(
 
 export async function completeMistralChat(
   messages: MistralChatRequestMessage[],
+  toolContext: AgentToolContext,
 ) {
   const client = createMistralClient();
+  const conversation: ChatCompletionRequest['messages'] = [
+    {
+      role: 'system',
+      content: `${SPOKEN_CONVERSATION_SYSTEM_PROMPT}\nThe workspace currently has parcel ID ${toolContext.selectedParcelId} selected.`,
+    },
+    ...messages,
+  ];
   const response = await client.chat.complete({
     model: process.env.MISTRAL_MODEL ?? 'mistral-small-latest',
-    messages: [
-      { role: 'system', content: SPOKEN_CONVERSATION_SYSTEM_PROMPT },
-      ...messages,
-    ],
+    messages: conversation,
+    tools: AGENT_TOOL_DEFINITIONS,
+    toolChoice: 'auto',
+    parallelToolCalls: false,
   });
-  const message = extractMistralText(response.choices[0]?.message?.content);
+  const assistantMessage = response.choices[0]?.message;
+
+  if (!assistantMessage) {
+    throw new EmptyMistralResponseError();
+  }
+
+  const toolCalls = assistantMessage?.toolCalls ?? [];
+
+  if (toolCalls.length === 0) {
+    const message = extractMistralText(assistantMessage?.content);
+
+    if (!message) {
+      throw new EmptyMistralResponseError();
+    }
+
+    return { message, actions: [] };
+  }
+
+  conversation.push({ ...assistantMessage, role: 'assistant' });
+  const actions: AgentActionEvent[] = [];
+
+  for (const toolCall of toolCalls) {
+    const execution = await executeAgentTool(
+      toolCall.function.name,
+      toolCall.function.arguments,
+      toolContext,
+    );
+
+    conversation.push({
+      role: 'tool',
+      name: toolCall.function.name,
+      toolCallId: toolCall.id,
+      content: execution.content,
+    });
+
+    if (execution.action) {
+      actions.push(execution.action);
+    }
+  }
+
+  const finalResponse = await client.chat.complete({
+    model: process.env.MISTRAL_MODEL ?? 'mistral-small-latest',
+    messages: conversation,
+    tools: AGENT_TOOL_DEFINITIONS,
+    toolChoice: 'none',
+    parallelToolCalls: false,
+  });
+  const message = extractMistralText(
+    finalResponse.choices[0]?.message?.content,
+  );
 
   if (!message) {
     throw new EmptyMistralResponseError();
   }
 
-  return message;
+  return { message, actions };
 }

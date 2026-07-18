@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import type { ChatStatus } from 'ai';
-import { AudioLines, Mic, Square, Volume2, X } from 'lucide-react';
+import { AudioLines, Database, Mic, Square, Volume2, X } from 'lucide-react';
 import { nanoid } from 'nanoid';
 
 import {
@@ -37,6 +37,7 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { useVoiceConversation } from '@/hooks/use-voice-conversation';
 import { ASSISTANT_IDENTITY } from '@/lib/assistant-identity';
+import { createBrowserDemoStateRepository } from '@/lib/db/local-storage-demo-state-repository';
 import type {
   MistralChatMessage,
   MistralChatResponse,
@@ -117,7 +118,14 @@ function isChatResponse(value: unknown): value is MistralChatResponse {
   return (
     response.success === true &&
     typeof response.data?.message === 'string' &&
-    response.data.message.length > 0
+    response.data.message.length > 0 &&
+    Array.isArray(response.data.actions) &&
+    response.data.actions.every(
+      (action) =>
+        action.name === 'get_selected_parcel_context' &&
+        typeof action.label === 'string' &&
+        action.status === 'completed',
+    )
   );
 }
 
@@ -166,6 +174,16 @@ function ChatContent({
             messages.map((message) => (
               <Message from={message.role} key={message.id}>
                 <MessageContent>
+                  {message.actions?.map((action) => (
+                    <Badge
+                      className="mb-2 w-fit"
+                      key={`${message.id}-${action.name}`}
+                      variant="outline"
+                    >
+                      <Database data-icon="inline-start" aria-hidden="true" />
+                      {action.label}
+                    </Badge>
+                  ))}
                   <MessageResponse>{message.content}</MessageResponse>
                 </MessageContent>
               </Message>
@@ -246,9 +264,14 @@ function ChatContent({
 type AssistantPanelProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  selectedParcelId: string;
 };
 
-export function AssistantPanel({ open, onOpenChange }: AssistantPanelProps) {
+export function AssistantPanel({
+  open,
+  onOpenChange,
+  selectedParcelId,
+}: AssistantPanelProps) {
   const abortControllerRef = useRef<AbortController | null>(null);
   const [messages, setMessages] = useState<MistralChatMessage[]>([]);
   const [status, setStatus] = useState<ChatStatus>('ready');
@@ -281,6 +304,12 @@ export function AssistantPanel({ open, onOpenChange }: AssistantPanelProps) {
     setStatus('submitted');
 
     try {
+      const demoState = createBrowserDemoStateRepository().load();
+      const activeInspection = demoState.activeInspection;
+      const inspectionHistory =
+        activeInspection.parcelId === selectedParcelId
+          ? activeInspection
+          : undefined;
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -289,6 +318,8 @@ export function AssistantPanel({ open, onOpenChange }: AssistantPanelProps) {
             role,
             content: messageContent,
           })),
+          selectedParcelId,
+          inspectionHistory,
         }),
         signal: abortController.signal,
       });
@@ -304,6 +335,7 @@ export function AssistantPanel({ open, onOpenChange }: AssistantPanelProps) {
           id: nanoid(),
           role: 'assistant',
           content: payload.data.message,
+          actions: payload.data.actions,
         },
       ]);
       setStatus('ready');

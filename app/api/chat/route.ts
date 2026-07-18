@@ -17,6 +17,63 @@ const chatRequestSchema = z.object({
     )
     .min(1)
     .max(40),
+  selectedParcelId: z.string().trim().min(1).max(100),
+  inspectionHistory: z
+    .object({
+      id: z.string().trim().min(1).max(100),
+      findingId: z.string().trim().min(1).max(100),
+      parcelId: z.string().trim().min(1).max(100),
+      sectorId: z.string().trim().min(1).max(100),
+      status: z.enum(['not-started', 'in-progress', 'ready-for-review']),
+      technicianName: z.string().trim().min(1).max(200).optional(),
+      conversation: z
+        .array(
+          z.object({
+            id: z.string().trim().min(1).max(100),
+            role: z.enum(['technician', 'assistant']),
+            content: z.string().trim().min(1).max(8_000),
+            createdAt: z.iso.datetime(),
+          }),
+        )
+        .max(40),
+      notes: z
+        .array(
+          z.object({
+            id: z.string().trim().min(1).max(100),
+            content: z.string().trim().min(1).max(2_000),
+            createdAt: z.iso.datetime(),
+          }),
+        )
+        .max(20),
+      photos: z
+        .array(
+          z.object({
+            id: z.string().trim().min(1).max(100),
+            dataUrl: z.string().max(8_000_000),
+            capturedAt: z.iso.datetime(),
+            analysis: z
+              .object({
+                observation: z.string().trim().min(1).max(2_000),
+                inference: z.string().trim().min(1).max(2_000),
+                uncertainty: z.string().trim().min(1).max(2_000),
+                recommendedVerification: z.string().trim().min(1).max(2_000),
+              })
+              .optional(),
+          }),
+        )
+        .max(10),
+      actions: z
+        .array(
+          z.object({
+            id: z.string().trim().min(1).max(100),
+            description: z.string().trim().min(1).max(1_000),
+            completedAt: z.iso.datetime(),
+          }),
+        )
+        .max(20),
+      nextStep: z.string().trim().min(1).max(1_000),
+    })
+    .optional(),
 });
 
 export async function POST(request: Request) {
@@ -48,9 +105,12 @@ export async function POST(request: Request) {
   }
 
   try {
-    const message = await completeMistralChat(parsedRequest.data.messages);
+    const result = await completeMistralChat(parsedRequest.data.messages, {
+      selectedParcelId: parsedRequest.data.selectedParcelId,
+      inspectionHistory: parsedRequest.data.inspectionHistory,
+    });
 
-    return NextResponse.json({ success: true, data: { message } });
+    return NextResponse.json({ success: true, data: result });
   } catch (error) {
     if (error instanceof MistralConfigurationError) {
       return NextResponse.json(

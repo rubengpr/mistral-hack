@@ -171,6 +171,7 @@ export function OperationsWorkspace({ route }: OperationsWorkspaceProps) {
           <AssistantPanel
             onOpenChange={setIsAssistantOpen}
             open={isAssistantOpen}
+            selectedParcelId={selectedParcelId}
           />
         </div>
       </SidebarInset>
