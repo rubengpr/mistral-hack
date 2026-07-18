@@ -102,6 +102,16 @@ export type Finding = {
   recommendedVerification: string;
 };
 
+export type ParcelReviewSummary = {
+  parcelId: string;
+  status: Exclude<ParcelMoistureStatus, 'stable'>;
+  title: string;
+  summary: string;
+  generatedAt: string;
+  source: 'mistral-morning-review';
+  quality: EvidenceQuality;
+};
+
 export type ConversationTurn = {
   id: string;
   role: 'technician' | 'assistant';
@@ -113,6 +123,9 @@ export type InspectionNote = {
   id: string;
   content: string;
   createdAt: string;
+  observation?: string;
+  assessment?: string;
+  uncertainty?: string;
 };
 
 export type FieldPhotoAnalysis = {
@@ -157,6 +170,7 @@ export type DemoScenario = {
   observations: EvidenceObservation[];
   irrigationEvents: IrrigationEvent[];
   findings: Finding[];
+  reviewSummaries: ParcelReviewSummary[];
 };
 
 export type DemoState = {

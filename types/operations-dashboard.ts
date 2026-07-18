@@ -1,5 +1,6 @@
 import type {
   ParcelCollection,
+  ParcelReviewSummary,
   SectorFeature,
 } from '@/types/agricultural-operations';
 
@@ -63,6 +64,7 @@ export type DashboardViewModel = {
   parcels: ParcelCollection;
   affectedSector: SectorFeature;
   finding: ActiveFinding;
+  reviewSummaries: ParcelReviewSummary[];
   moistureByParcelId: Record<string, MoisturePoint[]>;
   irrigationEvent: IrrigationEvent;
   weather: WeatherContext;
