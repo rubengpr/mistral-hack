@@ -6,6 +6,7 @@ import {
   LandPlot,
   MapPin,
   RadioTower,
+  Sparkles,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -13,6 +14,8 @@ import type { ReactNode } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Card,
   CardContent,
@@ -22,10 +25,12 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { ASSISTANT_IDENTITY } from '@/lib/assistant-identity';
 import { cn } from '@/lib/utils';
 import type { ActiveFinding } from '@/types/operations-dashboard';
 import type {
   ParcelProperties,
+  ParcelReviewSummary,
   SectorFeature,
 } from '@/types/agricultural-operations';
 
@@ -33,6 +38,16 @@ const DATE_FORMATTER = new Intl.DateTimeFormat('en', {
   dateStyle: 'medium',
   timeZone: 'Europe/Paris',
 });
+const REVIEW_DATE_FORMATTER = new Intl.DateTimeFormat('en', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+  timeZone: 'Europe/Paris',
+});
+const STATUS_LABELS = {
+  stable: 'Stable',
+  watch: 'Review',
+  critical: 'Critical',
+} as const;
 
 type SummaryItemProps = {
   hideLabel?: boolean;
@@ -71,16 +86,20 @@ function SummaryItem({
 type ParcelSummaryPanelProps = {
   affectedSector: SectorFeature;
   finding?: ActiveFinding;
+  onAskVinea: (parcelId: string) => void;
   onClose?: () => void;
   parcel: ParcelProperties;
+  reviewSummary?: ParcelReviewSummary;
   sensorCount: number;
 };
 
 export function ParcelSummaryPanel({
   affectedSector,
   finding,
+  onAskVinea,
   onClose,
   parcel,
+  reviewSummary,
   sensorCount,
 }: ParcelSummaryPanelProps) {
   const activeFinding = finding?.parcelId === parcel.id ? finding : undefined;
@@ -113,7 +132,7 @@ export function ParcelSummaryPanel({
               parcel.moistureStatus === 'critical' ? 'destructive' : 'secondary'
             }
           >
-            {parcel.moistureStatus}
+            {STATUS_LABELS[parcel.moistureStatus]}
           </Badge>
         </div>
         <CardDescription className="truncate">
@@ -122,6 +141,26 @@ export function ParcelSummaryPanel({
       </CardHeader>
 
       <CardContent className="px-4 pb-4">
+        {reviewSummary ? (
+          <Alert className="mb-4">
+            <Sparkles aria-hidden="true" />
+            <AlertTitle>AI review summary</AlertTitle>
+            <AlertDescription className="flex flex-col gap-2">
+              <p>
+                <span className="font-medium text-foreground">
+                  {reviewSummary.title}.
+                </span>{' '}
+                {reviewSummary.summary}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Mistral morning review · Simulated sensor data ·{' '}
+                {REVIEW_DATE_FORMATTER.format(
+                  new Date(reviewSummary.generatedAt),
+                )}
+              </p>
+            </AlertDescription>
+          </Alert>
+        ) : null}
         <Separator />
         <dl className="mt-4 grid grid-cols-2 gap-4">
           <SummaryItem
@@ -151,7 +190,7 @@ export function ParcelSummaryPanel({
           <SummaryItem
             icon={AlertTriangle}
             label="Active alert"
-            value={activeFinding?.title ?? 'None'}
+            value={activeFinding?.title ?? reviewSummary?.title ?? 'None'}
           />
           <SummaryItem
             icon={LandPlot}
@@ -168,6 +207,17 @@ export function ParcelSummaryPanel({
       </CardContent>
 
       <CardFooter className="flex-wrap justify-end gap-2 px-4 pb-4">
+        <Button
+          onClick={() => onAskVinea(parcel.id)}
+          size="sm"
+          type="button"
+        >
+          <Avatar className="size-5">
+            <AvatarImage alt="" src={ASSISTANT_IDENTITY.avatarSrc} />
+            <AvatarFallback>V</AvatarFallback>
+          </Avatar>
+          Ask Vinea
+        </Button>
         <Button asChild size="sm" variant="outline">
           <Link href={`/sensors#parcel-sensors-${parcel.id}`}>
             View sensor data
