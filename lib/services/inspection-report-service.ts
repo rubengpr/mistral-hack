@@ -84,6 +84,12 @@ export async function generateInspectionReport(
     );
   }
 
+  if (inspection.status !== 'ready-for-review') {
+    throw new InspectionReportInputError(
+      'Save and review the field inspection note before generating its report.',
+    );
+  }
+
   const scenario = getCanonicalDemoScenario();
   const parcel = scenario.parcels.features.find(
     ({ properties }) => properties.id === inspection.parcelId,
@@ -199,7 +205,7 @@ export async function generateInspectionReport(
     uncertainty: synthesis.uncertainty,
     action:
       inspection.actions.at(-1)?.description ??
-      'No action recorded.',
+      inspection.nextStep,
     nextFollowUp: inspection.nextStep,
     moistureTrend: moistureObservations.slice(-5).map((observation) => ({
       label: new Intl.DateTimeFormat('en', {
