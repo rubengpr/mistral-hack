@@ -13,7 +13,7 @@ import {
 import type { VoiceConversationState } from '@/types/voice-conversation';
 
 const SPEECH_THRESHOLD = 0.012;
-const SILENCE_DURATION_MS = 850;
+const SILENCE_DURATION_MS = 2_000;
 const MAX_TURN_DURATION_MS = 30_000;
 const REALTIME_SAMPLE_RATE = 16_000;
 const TTS_SAMPLE_RATE = 24_000;

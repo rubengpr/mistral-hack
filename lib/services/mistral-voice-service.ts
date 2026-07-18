@@ -25,10 +25,11 @@ export function getVoiceTranscriptionModel() {
 
 export async function transcribeMistralVoice(audio: Blob) {
   const client = createMistralClient();
+  const configuredLanguage = process.env.MISTRAL_TRANSCRIPTION_LANGUAGE;
   const response = await client.audio.transcriptions.complete({
     model: getVoiceTranscriptionModel(),
     file: audio,
-    language: process.env.MISTRAL_TRANSCRIPTION_LANGUAGE || 'es',
+    ...(configuredLanguage ? { language: configuredLanguage } : {}),
   });
   const transcript = response.text.trim();
 

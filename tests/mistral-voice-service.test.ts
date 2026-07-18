@@ -52,6 +52,20 @@ describe('Mistral voice service', () => {
     });
   });
 
+  it('lets Mistral detect the spoken language when none is configured', async () => {
+    delete process.env.MISTRAL_TRANSCRIPTION_LANGUAGE;
+    transcriptionComplete.mockResolvedValue({ text: 'Record this note.' });
+    const audio = new Blob([new Uint8Array([1, 2])], { type: 'audio/wav' });
+
+    await expect(transcribeMistralVoice(audio)).resolves.toBe(
+      'Record this note.',
+    );
+    expect(transcriptionComplete).toHaveBeenCalledWith({
+      model: 'voxtral-mini-2602',
+      file: audio,
+    });
+  });
+
   it('rejects an empty transcription', async () => {
     transcriptionComplete.mockResolvedValue({ text: '   ' });
 

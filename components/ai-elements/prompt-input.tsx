@@ -607,7 +607,7 @@ export const PromptInput = ({
         if (typeof capacity === 'number' && sized.length > capacity) {
           onError?.({
             code: 'max_files',
-            message: 'Too many files. Some were not added.',
+            message: `You can attach up to ${maxFiles} files. Some were not added.`,
           });
         }
         const next: (FileUIPart & { id: string })[] = [];
@@ -671,7 +671,7 @@ export const PromptInput = ({
       if (typeof capacity === 'number' && sized.length > capacity) {
         onError?.({
           code: 'max_files',
-          message: 'Too many files. Some were not added.',
+          message: `You can attach up to ${maxFiles} files. Some were not added.`,
         });
       }
 
