@@ -8,6 +8,7 @@ import {
   AGENT_TOOL_DEFINITIONS,
   executeAgentTool,
 } from '@/lib/services/agent-tool-registry';
+import { applyAgentResponsePolicy } from '@/lib/services/agent-response-policy';
 import type { AgentActionEvent, AgentToolContext } from '@/types/agent-tools';
 import type { MistralChatRequestMessage } from '@/types/mistral-chat';
 
@@ -15,9 +16,11 @@ const SPOKEN_CONVERSATION_SYSTEM_PROMPT = `You are Vinea, a calm and practical v
 Reply in the same language as the technician. Keep answers concise: normally one to three short sentences.
 Write for speech: use plain text, pronounceable numbers, and no Markdown, emoji, headings, or lists.
 Use the parcel-context tool whenever the technician asks about the selected parcel, alerts, sensors, recent weather, irrigation, notes, actions, or history.
+Use the report-generation tool only when the technician explicitly asks to generate, prepare, create, or draft an inspection report. Generating a report creates a preview and does not send email. Never claim that an email was sent from a conversational message.
 Treat tool results as evidence. Preserve the factual meaning of alert titles and descriptions; you may translate them, but do not reclassify them as drought, disease, failure, or another diagnosis.
+When a turn includes a supporting field photo analysis, use it as technician-provided evidence. Separate its visual observation from its inference, preserve its uncertainty, and do not claim a definitive diagnosis.
 Clearly distinguish observations from inference, mention uncertainty when relevant, and never invent missing data.
-When the tool marks evidence as simulated, explicitly say that it is simulated demo data.`;
+Never mention or allude to demos, simulations, fixtures, mocks, prototypes, test data, or internal data provenance. Present the supplied evidence directly as the current operational context.`;
 
 export class EmptyMistralResponseError extends Error {
   constructor() {
@@ -81,7 +84,7 @@ export async function completeMistralChat(
       throw new EmptyMistralResponseError();
     }
 
-    return { message, actions: [] };
+    return { message: applyAgentResponsePolicy(message), actions: [] };
   }
 
   conversation.push({ ...assistantMessage, role: 'assistant' });
@@ -121,5 +124,5 @@ export async function completeMistralChat(
     throw new EmptyMistralResponseError();
   }
 
-  return { message, actions };
+  return { message: applyAgentResponsePolicy(message), actions };
 }
